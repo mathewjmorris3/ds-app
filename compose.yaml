@@ -1,0 +1,101 @@
+services:
+
+  db:
+    image: postgres:17-bookworm
+    container_name: ds-app-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  web:
+    build:
+      context: ./app
+
+    container_name: ds-app-web
+    restart: unless-stopped
+
+    command: >
+      sh -c "
+      python manage.py collectstatic --noinput &&
+      gunicorn config.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 3
+      --timeout 60
+      "
+
+    env_file:
+      - .env
+
+    volumes:
+      - ./app:/app
+      - ./staticfiles:/app/staticfiles
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ds-app-caddy
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./staticfiles:/srv/static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+    depends_on:
+      - web
+
+
+  technitium:
+    image: docker.io/technitium/dns-server:latest
+    container_name: ds-app-dns
+    hostname: dns.home.arpa
+    restart: unless-stopped
+
+    ports:
+      - "192.168.0.11:53:53/udp"
+      - "192.168.0.11:53:53/tcp"
+      - "192.168.0.11:5380:5380/tcp"
+
+    environment:
+      DNS_SERVER_DOMAIN: dns.home.arpa
+
+    volumes:
+      - technitium_data:/etc/dns
+
+
+volumes:
+
+  postgres_data:
+
+  caddy_data:
+
+  caddy_config:
+
+  technitium_data:

@@ -1,0 +1,127 @@
+{% load static %}
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>
+{% block title %}
+DS Business Management
+{% endblock %}
+</title>
+
+<link
+    rel="stylesheet"
+    href="{% static 'core/app.css' %}"
+>
+
+{% block extra_head %}
+{% endblock %}
+
+</head>
+
+
+<body>
+
+
+<header class="app-header no-print">
+
+<div class="header-inner">
+
+<div class="brand">
+
+<div class="brand-mark">
+DS
+</div>
+
+<div>
+
+<div class="brand-name">
+DS Business Management
+</div>
+
+<div class="brand-subtitle">
+Sales & Employee Earnings
+</div>
+
+</div>
+
+</div>
+
+
+{% if user.is_authenticated %}
+
+<div class="header-actions">
+
+<div class="header-user">
+{{ user.username }}
+</div>
+
+<a
+    class="button button-secondary"
+    href="{% url 'dashboard' %}"
+>
+Dashboard
+</a>
+
+<form
+    class="logout-form"
+    method="post"
+    action="{% url 'logout' %}"
+>
+
+{% csrf_token %}
+
+<button
+    class="logout-button"
+    type="submit"
+>
+Logout
+</button>
+
+</form>
+
+</div>
+
+{% endif %}
+
+</div>
+
+</header>
+
+
+<main class="page">
+
+
+{% if messages %}
+
+{% for message in messages %}
+
+<div class="message {{ message.tags }}">
+{{ message }}
+</div>
+
+{% endfor %}
+
+{% endif %}
+
+
+{% block content %}
+{% endblock %}
+
+
+</main>
+
+
+</body>
+
+</html>

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>DS Business Management - Daily Closeout</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+        }
+
+        .container {
+            max-width: 750px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 18px;
+        }
+
+        h1, h2, h3 {
+            margin-top: 0;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-top: 12px;
+            margin-bottom: 5px;
+        }
+
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            font-size: 18px;
+            border: 1px solid #aaa;
+            border-radius: 5px;
+        }
+
+        .employee {
+            padding: 15px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .employee:last-child {
+            border-bottom: none;
+        }
+
+        .employee-name {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .employee-number {
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 7px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .important {
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        button {
+            width: 100%;
+            padding: 16px;
+            border: 0;
+            border-radius: 6px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .message {
+            padding: 10px;
+            background: #eee;
+            margin-bottom: 15px;
+        }
+
+        .help {
+            font-size: 14px;
+            color: #555;
+        }
+
+        a {
+            display: inline-block;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="card">
+        <h1>Daily Closeout</h1>
+
+        <p>
+            <strong>Business Date:</strong>
+            {{ business_date|date:"F j, Y" }}
+        </p>
+
+        {% if existing_closeout %}
+            <p>
+                <strong>
+                    Editing previously submitted closeout
+                </strong>
+            </p>
+        {% endif %}
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="message">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post">
+
+        {% csrf_token %}
+
+        {{ earning_formset.management_form }}
+
+        <div class="card">
+
+            <h2>Sales</h2>
+
+            <label for="{{ closeout_form.cash_sales.id_for_label }}">
+                Cash Sales
+            </label>
+
+            <p class="help">
+                Sales paid in cash. Do not include tips.
+            </p>
+
+            {{ closeout_form.cash_sales }}
+
+            {{ closeout_form.cash_sales.errors }}
+
+            <label for="{{ closeout_form.credit_card_sales.id_for_label }}">
+                Credit Card Sales
+            </label>
+
+            <p class="help">
+                Card sales only. Do not include card tips.
+            </p>
+
+            {{ closeout_form.credit_card_sales }}
+
+            {{ closeout_form.credit_card_sales.errors }}
+
+        </div>
+
+
+        <div class="card">
+
+            <h2>Employee Pay & Tips</h2>
+
+            {% for employee, form in employee_rows %}
+
+                <div class="employee">
+
+                    {{ form.employee_id }}
+
+                    <div class="employee-name">
+                        {% if employee.user.get_full_name %}
+                            {{ employee.user.get_full_name }}
+                        {% else %}
+                            {{ employee.user.username }}
+                        {% endif %}
+                    </div>
+
+                    <div class="employee-number">
+                        {{ employee.employee_number }}
+                        — {{ employee.job_title }}
+                    </div>
+
+                    <label>
+                        Cash Pay
+                    </label>
+
+                    {{ form.cash_pay }}
+                    {{ form.cash_pay.errors }}
+
+                    <label>
+                        Credit Card Tips
+                    </label>
+
+                    {{ form.card_tips }}
+                    {{ form.card_tips.errors }}
+
+                    <label>
+                        Cash Tips
+                    </label>
+
+                    {{ form.cash_tips }}
+                    {{ form.cash_tips.errors }}
+
+                </div>
+
+            {% endfor %}
+
+        </div>
+
+
+        <div class="card">
+
+            <h2>Calculated Totals</h2>
+
+            <div class="totals-row">
+                <span>Total Sales</span>
+                <span id="total-sales">$0.00</span>
+            </div>
+
+            <div class="totals-row">
+                <span>Total Employee Pay</span>
+                <span id="employee-pay">$0.00</span>
+            </div>
+
+            <div class="totals-row">
+                <span>Total Card Tips</span>
+                <span id="card-tips">$0.00</span>
+            </div>
+
+            <div class="totals-row">
+                <span>Total Cash Tips</span>
+                <span id="cash-tips">$0.00</span>
+            </div>
+
+            <div class="totals-row important">
+                <span>Expected Cash Deposit</span>
+                <span id="cash-deposit">$0.00</span>
+            </div>
+
+            <div class="totals-row">
+                <span>Gross Card Batch</span>
+                <span id="card-batch">$0.00</span>
+            </div>
+
+            <div class="totals-row important">
+                <span>Net Daily Proceeds</span>
+                <span id="net-proceeds">$0.00</span>
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <h2>Notes</h2>
+
+            {{ closeout_form.notes }}
+
+            <br><br>
+
+            <button type="submit">
+                {% if existing_closeout %}
+                    UPDATE CLOSEOUT
+                {% else %}
+                    SUBMIT CLOSEOUT
+                {% endif %}
+            </button>
+
+        </div>
+
+    </form>
+
+    <a href="{% url 'dashboard' %}">
+        Back to Dashboard
+    </a>
+
+</div>
+
+
+<script>
+function moneyValue(element) {
+    const value = parseFloat(element.value);
+    return isNaN(value) ? 0 : value;
+}
+
+function formatMoney(value) {
+    return "$" + value.toFixed(2);
+}
+
+function calculateTotals() {
+
+    const cashSalesInput =
+        document.getElementById("id_cash_sales");
+
+    const cardSalesInput =
+        document.getElementById("id_credit_card_sales");
+
+    const cashSales =
+        moneyValue(cashSalesInput);
+
+    const cardSales =
+        moneyValue(cardSalesInput);
+
+    let employeePay = 0;
+    let cardTips = 0;
+    let cashTips = 0;
+
+    document
+        .querySelectorAll(".cash-pay")
+        .forEach(function(input) {
+            employeePay += moneyValue(input);
+        });
+
+    document
+        .querySelectorAll(".card-tips")
+        .forEach(function(input) {
+            cardTips += moneyValue(input);
+        });
+
+    document
+        .querySelectorAll(".cash-tips")
+        .forEach(function(input) {
+            cashTips += moneyValue(input);
+        });
+
+
+    const totalSales =
+        cashSales + cardSales;
+
+    const expectedCashDeposit =
+        cashSales
+        - employeePay
+        - cardTips;
+
+    const grossCardBatch =
+        cardSales
+        + cardTips;
+
+    const netDailyProceeds =
+        cashSales
+        + cardSales
+        - employeePay;
+
+
+    document.getElementById(
+        "total-sales"
+    ).textContent = formatMoney(totalSales);
+
+    document.getElementById(
+        "employee-pay"
+    ).textContent = formatMoney(employeePay);
+
+    document.getElementById(
+        "card-tips"
+    ).textContent = formatMoney(cardTips);
+
+    document.getElementById(
+        "cash-tips"
+    ).textContent = formatMoney(cashTips);
+
+    document.getElementById(
+        "cash-deposit"
+    ).textContent = formatMoney(expectedCashDeposit);
+
+    document.getElementById(
+        "card-batch"
+    ).textContent = formatMoney(grossCardBatch);
+
+    document.getElementById(
+        "net-proceeds"
+    ).textContent = formatMoney(netDailyProceeds);
+}
+
+
+document
+    .querySelectorAll('input[type="number"]')
+    .forEach(function(input) {
+        input.addEventListener(
+            "input",
+            calculateTotals
+        );
+    });
+
+
+calculateTotals();
+</script>
+
+</body>
+</html>

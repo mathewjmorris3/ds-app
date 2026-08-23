@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <title>Closeout Saved</title>
+</head>
+
+<body>
+
+<h1>Daily Closeout Saved</h1>
+
+{% if messages %}
+    {% for message in messages %}
+        <p>{{ message }}</p>
+    {% endfor %}
+{% endif %}
+
+<p>
+    The daily financial information was saved successfully.
+</p>
+
+<p>
+    <a href="{% url 'dashboard' %}">
+        Return to Dashboard
+    </a>
+</p>
+
+</body>
+</html>

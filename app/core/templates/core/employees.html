@@ -1,0 +1,359 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+Employees | DS Business Management
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-header">
+
+<h1 class="page-title">
+Employees
+</h1>
+
+<p class="page-subtitle">
+Manage employee accounts and employment status.
+</p>
+
+</div>
+
+
+
+<div class="card">
+
+<h2 class="card-title">
+Employee List
+</h2>
+
+
+<div class="table-wrapper">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Employee #</th>
+<th>Name</th>
+<th>Username</th>
+<th>Job Title</th>
+<th>Type</th>
+<th>Status</th>
+
+{% if can_manage %}
+<th>Actions</th>
+{% endif %}
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+{% for employee in employees %}
+
+<tr>
+
+
+<td>
+
+<strong>
+{{ employee.employee_number }}
+</strong>
+
+</td>
+
+
+<td>
+
+{% if employee.user %}
+
+{{ employee.user.get_full_name|default:employee.user.username }}
+
+{% else %}
+
+—
+
+{% endif %}
+
+</td>
+
+
+<td>
+
+{% if employee.user %}
+
+{{ employee.user.username }}
+
+{% else %}
+
+—
+
+{% endif %}
+
+</td>
+
+
+<td>
+
+{{ employee.job_title|default:"—" }}
+
+</td>
+
+
+<td>
+
+{{ employee.get_employment_type_display }}
+
+</td>
+
+
+<td>
+
+{% if employee.is_active %}
+
+<span class="badge badge-success">
+Active
+</span>
+
+{% else %}
+
+<span class="badge badge-muted">
+Inactive
+</span>
+
+{% endif %}
+
+</td>
+
+
+{% if can_manage %}
+
+<td>
+
+<div class="actions">
+
+
+<a
+    class="button button-secondary"
+    href="{% url 'edit_employee' employee.id %}"
+>
+Edit
+</a>
+
+
+{% if employee.is_active %}
+
+<form
+    method="post"
+    action="{% url 'deactivate_employee' employee.id %}"
+>
+
+{% csrf_token %}
+
+<button
+    class="button button-danger"
+    type="submit"
+>
+Deactivate
+</button>
+
+</form>
+
+{% endif %}
+
+
+</div>
+
+</td>
+
+{% endif %}
+
+
+</tr>
+
+
+{% empty %}
+
+<tr>
+
+<td colspan="7">
+No employees found.
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+
+
+{% if can_manage %}
+
+<div class="card">
+
+<h2 class="card-title">
+Add Employee
+</h2>
+
+<p class="card-subtitle">
+Create an employee account and employment record.
+</p>
+
+
+<form method="post">
+
+{% csrf_token %}
+
+
+<div class="grid grid-2">
+
+
+<div class="form-group">
+
+<label>
+Username
+</label>
+
+{{ create_form.username }}
+{{ create_form.username.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Employee Number
+</label>
+
+{{ create_form.employee_number }}
+{{ create_form.employee_number.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+First Name
+</label>
+
+{{ create_form.first_name }}
+{{ create_form.first_name.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Last Name
+</label>
+
+{{ create_form.last_name }}
+{{ create_form.last_name.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Job Title
+</label>
+
+{{ create_form.job_title }}
+{{ create_form.job_title.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Employment Type
+</label>
+
+{{ create_form.employment_type }}
+{{ create_form.employment_type.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Hire Date
+</label>
+
+{{ create_form.hire_date }}
+{{ create_form.hire_date.errors }}
+
+</div>
+
+
+</div>
+
+
+<hr class="section-divider">
+
+
+<div class="grid grid-2">
+
+
+<div class="form-group">
+
+<label>
+Password
+</label>
+
+{{ create_form.password }}
+{{ create_form.password.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Confirm Password
+</label>
+
+{{ create_form.password_confirm }}
+{{ create_form.password_confirm.errors }}
+
+</div>
+
+
+</div>
+
+
+<button
+    class="button button-primary"
+    type="submit"
+>
+Add Employee
+</button>
+
+
+</form>
+
+</div>
+
+{% endif %}
+
+
+{% endblock %}

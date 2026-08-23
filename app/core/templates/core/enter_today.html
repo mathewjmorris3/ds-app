@@ -1,0 +1,339 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+Today's Data | DS Business Management
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-header">
+
+<h1 class="page-title">
+Today's Data
+</h1>
+
+<p class="page-subtitle">
+
+{{ business_date|date:"l, F j, Y" }}
+
+&nbsp;•&nbsp;
+
+{{ employee }}
+
+</p>
+
+</div>
+
+
+<form method="post">
+
+{% csrf_token %}
+
+
+<div class="card">
+
+<h2 class="card-title">
+Business Sales
+</h2>
+
+<p class="card-subtitle">
+Enter sales totals before tips.
+</p>
+
+
+<div class="grid grid-2">
+
+
+<div>
+
+<label>
+Cash Sales
+</label>
+
+{% if sales_locked %}
+
+<div class="locked-value">
+${{ daily_sales.cash_sales|floatformat:2 }}
+</div>
+
+{% else %}
+
+{{ sales_form.cash_sales }}
+
+{{ sales_form.cash_sales.errors }}
+
+{% endif %}
+
+</div>
+
+
+<div>
+
+<label>
+Credit Card Sales
+</label>
+
+{% if sales_locked %}
+
+<div class="locked-value">
+${{ daily_sales.credit_card_sales|floatformat:2 }}
+</div>
+
+{% else %}
+
+{{ sales_form.credit_card_sales }}
+
+{{ sales_form.credit_card_sales.errors }}
+
+{% endif %}
+
+</div>
+
+
+</div>
+
+
+{% if sales_locked %}
+
+<p class="help">
+Today's sales have already been submitted.
+A manager can correct them if necessary.
+</p>
+
+{% endif %}
+
+</div>
+
+
+
+<div class="card">
+
+<h2 class="card-title">
+My Earnings
+</h2>
+
+<p class="card-subtitle">
+Enter your pay and tips for today.
+</p>
+
+
+<div class="grid grid-3">
+
+
+<div>
+
+<label>
+Cash Pay
+</label>
+
+{% if earnings_locked %}
+
+<div class="locked-value">
+${{ earning.cash_pay|floatformat:2 }}
+</div>
+
+{% else %}
+
+{{ earning_form.cash_pay }}
+
+{{ earning_form.cash_pay.errors }}
+
+{% endif %}
+
+</div>
+
+
+
+<div>
+
+<label>
+Credit Card Tips
+</label>
+
+{% if earnings_locked %}
+
+<div class="locked-value">
+${{ earning.card_tips|floatformat:2 }}
+</div>
+
+{% else %}
+
+{{ earning_form.card_tips }}
+
+{{ earning_form.card_tips.errors }}
+
+{% endif %}
+
+</div>
+
+
+
+<div>
+
+<label>
+Cash Tips
+</label>
+
+{% if earnings_locked %}
+
+<div class="locked-value">
+${{ earning.cash_tips|floatformat:2 }}
+</div>
+
+{% else %}
+
+{{ earning_form.cash_tips }}
+
+{{ earning_form.cash_tips.errors }}
+
+{% endif %}
+
+</div>
+
+
+</div>
+
+
+{% if earnings_locked %}
+
+<div style="margin-top:18px">
+
+<div class="metric metric-highlight">
+
+<div class="metric-label">
+Today's Total Earnings
+</div>
+
+<div class="metric-value">
+${{ earning.total_earnings|floatformat:2 }}
+</div>
+
+</div>
+
+</div>
+
+{% endif %}
+
+</div>
+
+
+{% if not sales_locked or not earnings_locked %}
+
+<div class="actions">
+
+<button
+    class="button button-primary"
+    type="submit"
+>
+Save My Data
+</button>
+
+</div>
+
+<br>
+
+{% endif %}
+
+
+</form>
+
+
+
+{% if role == "Manager" %}
+
+<div class="card">
+
+<h2 class="card-title">
+Enter Pay & Tips for Another Employee
+</h2>
+
+<p class="card-subtitle">
+Use this when another employee worked today.
+Enter the employee's total pay and tips for the day.
+</p>
+
+
+<form
+    method="post"
+    action="{% url 'manager_add_employee_earnings' %}"
+>
+
+{% csrf_token %}
+
+
+<div class="form-group">
+
+<label>
+Employee
+</label>
+
+{{ manager_employee_form.employee }}
+
+{{ manager_employee_form.employee.errors }}
+
+</div>
+
+
+<div class="grid grid-3">
+
+
+<div class="form-group">
+
+<label>
+Cash Pay
+</label>
+
+{{ manager_employee_form.cash_pay }}
+
+{{ manager_employee_form.cash_pay.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Credit Card Tips
+</label>
+
+{{ manager_employee_form.card_tips }}
+
+{{ manager_employee_form.card_tips.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Cash Tips
+</label>
+
+{{ manager_employee_form.cash_tips }}
+
+{{ manager_employee_form.cash_tips.errors }}
+
+</div>
+
+
+</div>
+
+
+<button
+    class="button button-primary"
+    type="submit"
+>
+Save Employee Pay & Tips
+</button>
+
+
+</form>
+
+</div>
+
+{% endif %}
+
+
+{% endblock %}

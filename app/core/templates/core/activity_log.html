@@ -1,0 +1,278 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+Activity Log | DS Business Management
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-header">
+
+<h1 class="page-title">
+Activity Log
+</h1>
+
+<p class="page-subtitle">
+Audit history for business and employee record changes.
+</p>
+
+</div>
+
+
+
+<div class="card no-print">
+
+<form
+    method="get"
+    class="inline-form"
+>
+
+
+<div class="form-group">
+
+<label>
+User
+</label>
+
+<select name="actor">
+
+<option value="">
+All Users
+</option>
+
+{% for actor in actor_options %}
+
+<option
+    value="{{ actor }}"
+    {% if actor == selected_actor %}
+    selected
+    {% endif %}
+>
+
+{{ actor }}
+
+</option>
+
+{% endfor %}
+
+</select>
+
+</div>
+
+
+
+<div class="form-group">
+
+<label>
+Action
+</label>
+
+<select name="action">
+
+<option value="">
+All Actions
+</option>
+
+{% for value, label in action_options %}
+
+<option
+    value="{{ value }}"
+    {% if value == selected_action %}
+    selected
+    {% endif %}
+>
+
+{{ label }}
+
+</option>
+
+{% endfor %}
+
+</select>
+
+</div>
+
+
+<button
+    class="button button-primary"
+    type="submit"
+>
+Filter
+</button>
+
+
+<a
+    class="button button-secondary"
+    href="{% url 'activity_log' %}"
+>
+Clear
+</a>
+
+
+</form>
+
+</div>
+
+
+
+<div class="card">
+
+<div class="table-wrapper">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Date / Time</th>
+<th>User</th>
+<th>Action</th>
+<th>Type</th>
+<th>Description</th>
+<th>Details</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+{% for log in page_obj %}
+
+<tr>
+
+<td>
+{{ log.created_at|date:"M j, Y g:i A" }}
+</td>
+
+
+<td>
+
+{% if log.actor %}
+{{ log.actor.username }}
+{% else %}
+System
+{% endif %}
+
+</td>
+
+
+<td>
+
+<span class="badge badge-role">
+{{ log.get_action_display }}
+</span>
+
+</td>
+
+
+<td>
+{{ log.object_type }}
+</td>
+
+
+<td>
+{{ log.description }}
+</td>
+
+
+<td>
+
+{% if log.details %}
+
+<details>
+
+<summary>
+View
+</summary>
+
+<div class="details-box">
+
+<pre>{{ log.details_pretty }}</pre>
+
+</div>
+
+</details>
+
+{% else %}
+
+—
+
+{% endif %}
+
+</td>
+
+</tr>
+
+
+{% empty %}
+
+<tr>
+
+<td colspan="6">
+No activity records found.
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+
+
+{% if page_obj.paginator.num_pages > 1 %}
+
+<div class="card no-print">
+
+<div class="actions">
+
+
+{% if page_obj.has_previous %}
+
+<a
+    class="button button-secondary"
+    href="?page={{ page_obj.previous_page_number }}&actor={{ selected_actor }}&action={{ selected_action }}"
+>
+Previous
+</a>
+
+{% endif %}
+
+
+<span>
+Page {{ page_obj.number }}
+of {{ page_obj.paginator.num_pages }}
+</span>
+
+
+{% if page_obj.has_next %}
+
+<a
+    class="button button-secondary"
+    href="?page={{ page_obj.next_page_number }}&actor={{ selected_actor }}&action={{ selected_action }}"
+>
+Next
+</a>
+
+{% endif %}
+
+
+</div>
+
+</div>
+
+{% endif %}
+
+
+{% endblock %}

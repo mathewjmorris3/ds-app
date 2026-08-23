@@ -1,0 +1,562 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+{{ report_title }} | DS Business Management
+{% endblock %}
+
+
+{% block extra_head %}
+
+<style>
+
+/*
+ * Business reports contain a wide 10-column daily table.
+ * These rules affect PRINTING ONLY.
+ */
+@page {
+    size: landscape;
+    margin: 0.35in;
+}
+
+@media print {
+
+    body {
+        font-size: 10pt;
+    }
+
+    .page-header {
+        margin-bottom: 10px;
+    }
+
+    .page-title {
+        font-size: 20pt;
+    }
+
+    .card {
+        margin-bottom: 12px;
+    }
+
+    /*
+     * Force wide report tables to remain inside
+     * the printable page width.
+     */
+    .report-table {
+        width: 100% !important;
+        table-layout: fixed;
+        border-collapse: collapse;
+    }
+
+    .report-table th,
+    .report-table td {
+        padding: 4px 3px !important;
+        font-size: 8pt !important;
+        line-height: 1.15;
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+    }
+
+    .report-table th {
+        font-size: 7.5pt !important;
+    }
+
+    /*
+     * Keep dollar amounts on one line.
+     */
+    .report-table .money {
+        white-space: nowrap !important;
+    }
+
+    /*
+     * Let the date column have slightly more room.
+     */
+    .daily-table th:first-child,
+    .daily-table td:first-child {
+        width: 10%;
+    }
+
+    /*
+     * Remaining columns divide the available
+     * landscape width.
+     */
+    .daily-table th:not(:first-child),
+    .daily-table td:not(:first-child) {
+        width: 10%;
+    }
+
+    .table-wrapper {
+        overflow: visible !important;
+        width: 100% !important;
+    }
+
+    /*
+     * Avoid splitting a row between pages.
+     */
+    tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /*
+     * Repeat column headers on additional pages.
+     */
+    thead {
+        display: table-header-group;
+    }
+
+    /*
+     * Prevent cards from being unnecessarily
+     * split where possible.
+     */
+    .metric {
+        padding: 8px;
+    }
+
+    .metric-label {
+        font-size: 8pt;
+    }
+
+    .metric-value {
+        font-size: 14pt;
+    }
+}
+
+</style>
+
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-header">
+
+<h1 class="page-title">
+{{ report_title }}
+</h1>
+
+<p class="page-subtitle">
+
+{{ start_date|date:"F j, Y" }}
+
+{% if start_date != end_date %}
+through {{ end_date|date:"F j, Y" }}
+{% endif %}
+
+</p>
+
+</div>
+
+
+
+<div class="card no-print">
+
+<div class="tabs">
+
+<a
+    class="tab {% if period == 'daily' %}active{% endif %}"
+    href="{% url 'reports_period' 'daily' %}?date={{ anchor_date|date:'Y-m-d' }}"
+>
+Daily
+</a>
+
+<a
+    class="tab {% if period == 'weekly' %}active{% endif %}"
+    href="{% url 'reports_period' 'weekly' %}?date={{ anchor_date|date:'Y-m-d' }}"
+>
+Weekly
+</a>
+
+<a
+    class="tab {% if period == 'monthly' %}active{% endif %}"
+    href="{% url 'reports_period' 'monthly' %}?date={{ anchor_date|date:'Y-m-d' }}"
+>
+Monthly
+</a>
+
+<a
+    class="tab {% if period == 'ytd' %}active{% endif %}"
+    href="{% url 'reports_period' 'ytd' %}?date={{ anchor_date|date:'Y-m-d' }}"
+>
+YTD
+</a>
+
+</div>
+
+
+<form
+    method="get"
+    class="inline-form"
+>
+
+<div class="form-group">
+
+<label for="date">
+Report Date
+</label>
+
+<input
+    type="date"
+    id="date"
+    name="date"
+    value="{{ anchor_date|date:'Y-m-d' }}"
+>
+
+</div>
+
+<button
+    class="button button-primary"
+    type="submit"
+>
+View Report
+</button>
+
+<button
+    class="button button-secondary"
+    type="button"
+    onclick="window.print()"
+>
+Print
+</button>
+
+</form>
+
+</div>
+
+
+
+<div class="card">
+
+<h2 class="card-title">
+Business Summary
+</h2>
+
+<p class="card-subtitle">
+Totals for the selected reporting period.
+</p>
+
+
+<div class="grid grid-auto">
+
+
+<div class="metric">
+
+<div class="metric-label">
+Cash Sales
+</div>
+
+<div class="metric-value">
+${{ summary.cash_sales|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Credit Card Sales
+</div>
+
+<div class="metric-value">
+${{ summary.credit_card_sales|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric metric-highlight">
+
+<div class="metric-label">
+Total Sales
+</div>
+
+<div class="metric-value">
+${{ summary.total_sales|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Employee Pay
+</div>
+
+<div class="metric-value">
+${{ summary.employee_pay|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Card Tips
+</div>
+
+<div class="metric-value">
+${{ summary.card_tips|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Cash Tips
+</div>
+
+<div class="metric-value">
+${{ summary.cash_tips|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Employee Earnings
+</div>
+
+<div class="metric-value">
+${{ summary.employee_earnings|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Expected Cash Deposit
+</div>
+
+<div class="metric-value">
+${{ summary.expected_cash_deposit|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Gross Card Batch
+</div>
+
+<div class="metric-value">
+${{ summary.gross_card_batch|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric metric-highlight">
+
+<div class="metric-label">
+Net Business Proceeds
+</div>
+
+<div class="metric-value">
+${{ summary.net_daily_proceeds|floatformat:2 }}
+</div>
+
+</div>
+
+
+</div>
+
+</div>
+
+
+
+<div class="card">
+
+<h2 class="card-title">
+Daily Breakdown
+</h2>
+
+
+{% if daily_rows %}
+
+<div class="table-wrapper">
+
+<table class="report-table daily-table">
+
+<thead>
+
+<tr>
+
+<th>Date</th>
+<th class="money">Cash Sales</th>
+<th class="money">Card Sales</th>
+<th class="money">Total Sales</th>
+<th class="money">Employee Pay</th>
+<th class="money">Card Tips</th>
+<th class="money">Cash Tips</th>
+<th class="money">Cash Deposit</th>
+<th class="money">Card Batch</th>
+<th class="money">Net Proceeds</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+{% for row in daily_rows %}
+
+<tr>
+
+<td>
+{{ row.business_date|date:"M j, Y" }}
+</td>
+
+<td class="money">
+${{ row.cash_sales|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.credit_card_sales|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.total_sales|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.employee_pay|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.card_tips|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.cash_tips|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.expected_cash_deposit|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.gross_card_batch|floatformat:2 }}
+</td>
+
+<td class="money">
+<strong>
+${{ row.net_daily_proceeds|floatformat:2 }}
+</strong>
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+{% else %}
+
+<p class="page-subtitle">
+No business records exist for this period.
+</p>
+
+{% endif %}
+
+</div>
+
+
+
+<div class="card">
+
+<h2 class="card-title">
+Employee Earnings
+</h2>
+
+
+{% if employee_rows %}
+
+<div class="table-wrapper">
+
+<table class="report-table">
+
+<thead>
+
+<tr>
+
+<th>Employee #</th>
+<th>Employee</th>
+<th class="money">Cash Pay</th>
+<th class="money">Card Tips</th>
+<th class="money">Cash Tips</th>
+<th class="money">Total Earnings</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+{% for employee in employee_rows %}
+
+<tr>
+
+<td>
+{{ employee.employee_number }}
+</td>
+
+<td>
+{{ employee.name }}
+</td>
+
+<td class="money">
+${{ employee.cash_pay|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ employee.card_tips|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ employee.cash_tips|floatformat:2 }}
+</td>
+
+<td class="money">
+<strong>
+${{ employee.total_earnings|floatformat:2 }}
+</strong>
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+{% else %}
+
+<p class="page-subtitle">
+No employee earnings were recorded for this period.
+</p>
+
+{% endif %}
+
+</div>
+
+
+{% endblock %}

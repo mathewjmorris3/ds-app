@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <title>Closeout Already Submitted</title>
+</head>
+
+<body>
+
+<h1>Daily Closeout</h1>
+
+{% if messages %}
+    {% for message in messages %}
+        <p>{{ message }}</p>
+    {% endfor %}
+{% endif %}
+
+<p>
+    The closeout for
+    <strong>{{ closeout.business_date }}</strong>
+    has already been submitted.
+</p>
+
+<p>
+    Contact a manager if a correction is required.
+</p>
+
+<p>
+    <a href="{% url 'dashboard' %}">
+        Return to Dashboard
+    </a>
+</p>
+
+</body>
+</html>

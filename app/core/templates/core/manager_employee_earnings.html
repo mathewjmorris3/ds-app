@@ -1,0 +1,117 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+Employee Pay & Tips | DS Business Management
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-header">
+
+<h1 class="page-title">
+Employee Pay & Tips
+</h1>
+
+<p class="page-subtitle">
+Enter or correct an employee's earnings for a selected business date.
+All changes are recorded in the Activity Log.
+</p>
+
+</div>
+
+
+
+<div class="card">
+
+<form method="post">
+
+{% csrf_token %}
+
+
+<div class="form-group">
+
+<label>
+Business Date
+</label>
+
+{{ form.business_date }}
+
+{{ form.business_date.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Employee
+</label>
+
+{{ form.employee }}
+
+{{ form.employee.errors }}
+
+</div>
+
+
+<div class="grid grid-3">
+
+
+<div class="form-group">
+
+<label>
+Cash Pay
+</label>
+
+{{ form.cash_pay }}
+
+{{ form.cash_pay.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Credit Card Tips
+</label>
+
+{{ form.card_tips }}
+
+{{ form.card_tips.errors }}
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+Cash Tips
+</label>
+
+{{ form.cash_tips }}
+
+{{ form.cash_tips.errors }}
+
+</div>
+
+
+</div>
+
+
+<button
+    class="button button-primary"
+    type="submit"
+>
+Save Employee Earnings
+</button>
+
+
+</form>
+
+</div>
+
+
+{% endblock %}

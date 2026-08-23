@@ -1,0 +1,243 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+Dashboard | DS Business Management
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-header">
+
+<h1 class="page-title">
+Dashboard
+</h1>
+
+<p class="page-subtitle">
+Welcome, {{ user.get_full_name|default:user.username }}.
+<span class="badge badge-role">{{ role }}</span>
+</p>
+
+</div>
+
+
+{% if role == "Employee" %}
+
+<div class="dashboard-grid">
+
+<a
+    class="dashboard-card"
+    href="{% url 'enter_today' %}"
+>
+
+<h3>Enter Today's Data</h3>
+
+<p>
+Record today's sales, pay and tips.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'employee_earnings_report_period' 'monthly' %}"
+>
+
+<h3>My Earnings</h3>
+
+<p>
+View your pay, tips and earnings history.
+</p>
+
+</a>
+
+</div>
+
+
+{% elif role == "Manager" %}
+
+<div class="dashboard-grid">
+
+<a
+    class="dashboard-card"
+    href="{% url 'enter_today' %}"
+>
+
+<h3>Today's Data</h3>
+
+<p>
+Enter sales and employee earnings for today.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'manager_employee_earnings' %}"
+>
+
+<h3>Employee Pay & Tips</h3>
+
+<p>
+Enter or correct earnings for another employee.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'employee_earnings_report_period' 'monthly' %}"
+>
+
+<h3>My Earnings</h3>
+
+<p>
+View your personal earnings history.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'reports_period' 'weekly' %}"
+>
+
+<h3>Business Reports</h3>
+
+<p>
+Review sales, deposits, tips and earnings.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'employees' %}"
+>
+
+<h3>Employees</h3>
+
+<p>
+Manage employee accounts and status.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'activity_log' %}"
+>
+
+<h3>Activity Log</h3>
+
+<p>
+Review changes made to business records.
+</p>
+
+</a>
+
+</div>
+
+
+{% elif role == "Owner" %}
+
+<div class="dashboard-grid">
+
+<a
+    class="dashboard-card"
+    href="{% url 'reports_period' 'daily' %}"
+>
+
+<h3>Daily Report</h3>
+
+<p>
+Review today's business performance.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'reports_period' 'weekly' %}"
+>
+
+<h3>Weekly Report</h3>
+
+<p>
+Review weekly sales and earnings.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'reports_period' 'monthly' %}"
+>
+
+<h3>Monthly Report</h3>
+
+<p>
+Review monthly business performance.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'reports_period' 'ytd' %}"
+>
+
+<h3>Year-to-Date</h3>
+
+<p>
+Review year-to-date business totals.
+</p>
+
+</a>
+
+
+<a
+    class="dashboard-card"
+    href="{% url 'employees' %}"
+>
+
+<h3>Employees</h3>
+
+<p>
+View current and historical employees.
+</p>
+
+</a>
+
+</div>
+
+
+{% else %}
+
+<div class="card">
+
+<h2 class="card-title">
+No Role Assigned
+</h2>
+
+<p class="card-subtitle">
+Your account does not have an application role.
+Contact the administrator.
+</p>
+
+</div>
+
+{% endif %}
+
+
+{% endblock %}

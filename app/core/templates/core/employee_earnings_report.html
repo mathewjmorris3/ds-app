@@ -1,0 +1,366 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+Employee Earnings Report
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-header">
+
+<h1 class="page-title">
+Employee Earnings Report
+</h1>
+
+<p class="page-subtitle">
+{{ employee_name }} • {{ employee.employee_number }}
+</p>
+
+</div>
+
+
+
+<div class="card no-print">
+
+<div class="tabs">
+
+<a
+    class="tab {% if period == 'weekly' %}active{% endif %}"
+    href="{% url 'employee_earnings_report_period' 'weekly' %}?date={{ anchor_date|date:'Y-m-d' }}"
+>
+Weekly
+</a>
+
+<a
+    class="tab {% if period == 'monthly' %}active{% endif %}"
+    href="{% url 'employee_earnings_report_period' 'monthly' %}?date={{ anchor_date|date:'Y-m-d' }}"
+>
+Monthly
+</a>
+
+<a
+    class="tab {% if period == 'ytd' %}active{% endif %}"
+    href="{% url 'employee_earnings_report_period' 'ytd' %}"
+>
+YTD
+</a>
+
+<a
+    class="tab {% if period == 'yearly' %}active{% endif %}"
+    href="{% url 'employee_earnings_report_period' 'yearly' %}?date={{ anchor_date|date:'Y-m-d' }}"
+>
+Yearly
+</a>
+
+<a
+    class="tab {% if period == 'custom' %}active{% endif %}"
+    href="{% url 'employee_earnings_report_period' 'custom' %}"
+>
+Custom
+</a>
+
+</div>
+
+
+{% if period == "custom" %}
+
+<form
+    method="get"
+    class="inline-form"
+>
+
+<div class="form-group">
+
+<label>
+Start Date
+</label>
+
+<input
+    type="date"
+    name="start"
+    value="{{ start_date|date:'Y-m-d' }}"
+>
+
+</div>
+
+
+<div class="form-group">
+
+<label>
+End Date
+</label>
+
+<input
+    type="date"
+    name="end"
+    value="{{ end_date|date:'Y-m-d' }}"
+>
+
+</div>
+
+
+<button
+    class="button button-primary"
+    type="submit"
+>
+View
+</button>
+
+</form>
+
+
+{% elif period != "ytd" %}
+
+<form
+    method="get"
+    class="inline-form"
+>
+
+<div class="form-group">
+
+<label>
+Report Date
+</label>
+
+<input
+    type="date"
+    name="date"
+    value="{{ anchor_date|date:'Y-m-d' }}"
+>
+
+</div>
+
+<button
+    class="button button-primary"
+    type="submit"
+>
+View
+</button>
+
+</form>
+
+{% endif %}
+
+</div>
+
+
+
+<div class="card">
+
+<h2 class="card-title">
+{{ report_title }}
+</h2>
+
+<p class="card-subtitle">
+
+{{ start_date|date:"F j, Y" }}
+
+{% if start_date != end_date %}
+through {{ end_date|date:"F j, Y" }}
+{% endif %}
+
+</p>
+
+
+<div class="grid grid-auto">
+
+
+<div class="metric">
+
+<div class="metric-label">
+Cash Pay
+</div>
+
+<div class="metric-value">
+${{ cash_pay|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Credit Card Tips
+</div>
+
+<div class="metric-value">
+${{ card_tips|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Cash Tips
+</div>
+
+<div class="metric-value">
+${{ cash_tips|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Total Tips
+</div>
+
+<div class="metric-value">
+${{ total_tips|floatformat:2 }}
+</div>
+
+</div>
+
+
+<div class="metric metric-highlight">
+
+<div class="metric-label">
+Total Earnings
+</div>
+
+<div class="metric-value">
+${{ total_earnings|floatformat:2 }}
+</div>
+
+</div>
+
+
+</div>
+
+</div>
+
+
+
+<div class="card">
+
+<h2 class="card-title">
+Earnings Detail
+</h2>
+
+<p class="card-subtitle">
+{{ days_recorded }} day{{ days_recorded|pluralize }} with recorded earnings.
+</p>
+
+
+{% if rows %}
+
+<div class="table-wrapper">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Date</th>
+<th class="money">Cash Pay</th>
+<th class="money">Card Tips</th>
+<th class="money">Cash Tips</th>
+<th class="money">Total Tips</th>
+<th class="money">Total Earnings</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+{% for row in rows %}
+
+<tr>
+
+<td>
+{{ row.business_date|date:"M j, Y" }}
+</td>
+
+<td class="money">
+${{ row.cash_pay|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.card_tips|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.cash_tips|floatformat:2 }}
+</td>
+
+<td class="money">
+${{ row.total_tips|floatformat:2 }}
+</td>
+
+<td class="money">
+<strong>
+${{ row.total_earnings|floatformat:2 }}
+</strong>
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+{% else %}
+
+<p>
+No earnings were recorded for this period.
+</p>
+
+{% endif %}
+
+</div>
+
+
+
+<div class="card">
+
+<div class="actions no-print">
+
+<button
+    class="button button-primary"
+    type="button"
+    onclick="window.print()"
+>
+Print Earnings Report
+</button>
+
+</div>
+
+
+<hr class="section-divider">
+
+
+<p class="footer-note">
+
+This report summarizes pay and tips recorded in
+DS Business Management. It is an employee earnings
+record and is not an official W-2, tax return,
+payroll tax statement or lender-issued verification document.
+
+</p>
+
+
+<p class="footer-note">
+
+Generated:
+{{ generated_at|date:"F j, Y g:i A" }}
+
+</p>
+
+</div>
+
+
+{% endblock %}
