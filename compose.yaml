@@ -55,6 +55,8 @@ services:
   caddy:
     image: caddy:2-alpine
     container_name: ds-app-caddy
+    environment:
+      APP_HOSTNAME: ${APP_HOSTNAME}
     restart: unless-stopped
 
     ports:
@@ -79,9 +81,9 @@ services:
     restart: unless-stopped
 
     ports:
-      - "192.168.0.11:53:53/udp"
-      - "192.168.0.11:53:53/tcp"
-      - "192.168.0.11:5380:5380/tcp"
+      - "${SERVER_IP}:53:53/udp"
+      - "${SERVER_IP}:53:53/tcp"
+      - "${SERVER_IP}:5380:5380/tcp"
 
     environment:
       DNS_SERVER_DOMAIN: dns.home.arpa

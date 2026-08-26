@@ -1,4 +1,4 @@
-dsapp.home.arpa {
+{$APP_HOSTNAME} {
 
     tls internal
 
