@@ -32,6 +32,8 @@ Today's Data
 {% csrf_token %}
 
 
+{% if role == "Manager" %}
+<p><a href="{% url 'manage_sales' %}">Sales entry and historical corrections</a></p>
 <div class="card">
 
 <h2 class="card-title">
@@ -39,7 +41,7 @@ Business Sales
 </h2>
 
 <p class="card-subtitle">
-Enter sales totals before tips.
+Use Sales entry for drawer closeouts. Legacy sales totals below exclude tips.
 </p>
 
 
@@ -55,7 +57,7 @@ Cash Sales
 {% if sales_locked %}
 
 <div class="locked-value">
-${{ daily_sales.cash_sales|floatformat:2 }}
+${{ daily_sales.sales_cash|floatformat:2 }}
 </div>
 
 {% else %}
@@ -78,7 +80,7 @@ Credit Card Sales
 {% if sales_locked %}
 
 <div class="locked-value">
-${{ daily_sales.credit_card_sales|floatformat:2 }}
+${{ daily_sales.sales_card|floatformat:2 }}
 </div>
 
 {% else %}
@@ -107,6 +109,11 @@ A manager can correct them if necessary.
 </div>
 
 
+
+{% endif %}
+{% if not daily_sales and role != "Manager" %}
+<p>A manager must enter today’s sales before you can submit earnings.</p>
+{% endif %}
 
 <div class="card">
 

@@ -46,8 +46,19 @@ class EmployeeAdmin(admin.ModelAdmin):
         return full_name or obj.user.username
 
 
+class FinancialReadOnlyAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(DailySales)
-class DailySalesAdmin(admin.ModelAdmin):
+class DailySalesAdmin(FinancialReadOnlyAdmin):
     list_display = (
         "business_date",
         "cash_sales",
@@ -70,7 +81,7 @@ class DailySalesAdmin(admin.ModelAdmin):
 
 
 @admin.register(EmployeeEarning)
-class EmployeeEarningAdmin(admin.ModelAdmin):
+class EmployeeEarningAdmin(FinancialReadOnlyAdmin):
     list_display = (
         "get_business_date",
         "employee",
@@ -146,3 +157,13 @@ class ActivityLogAdmin(admin.ModelAdmin):
         "details",
         "created_at",
     )
+
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

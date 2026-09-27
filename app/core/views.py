@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 import calendar
 import json
+from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -10,10 +11,31 @@ from django.db import transaction
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.urls import reverse
 from django.contrib.auth.models import Group
 from .forms import (DailySalesForm, EmployeeEarningForm, EmployeeCreateForm, ManagerEmployeeEarningForm, ManagerOtherEmployeeEarningsForm)
 from .models import ActivityLog, DailySales, EmployeeEarning, Employee
 from django.core.paginator import Paginator
+
+
+def editable_business_date(view):
+    """Serialize writers for an existing day and enforce the finalization lock."""
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if request.method != "POST":
+            return view(request, *args, **kwargs)
+        raw = (request.POST.get("business_date")
+               if view.__name__ in ("manage_sales", "manager_employee_earnings") else None)
+        try:
+            day = date.fromisoformat(raw) if raw else timezone.localdate()
+        except ValueError:
+            day = None
+        with transaction.atomic():
+            sales = DailySales.objects.select_for_update().filter(business_date=day).first()
+            if sales and sales.finalized_at:
+                return HttpResponseForbidden("This closeout is finalized. A manager must reopen it before any changes.")
+            return view(request, *args, **kwargs)
+    return wrapped
 
 
 def user_has_role(user, role):
@@ -48,6 +70,7 @@ def dashboard(request):
 
 
 @login_required
+@editable_business_date
 def enter_today(request):
 
     role = get_role(request.user)
@@ -90,10 +113,28 @@ def enter_today(request):
 
     is_manager = role == "Manager"
 
-    sales_locked = daily_sales is not None and not is_manager
+    sales_locked = not is_manager
     earnings_locked = earning is not None and not is_manager
 
+    # ModelForm validation mutates its instance; snapshot before binding.
+    original_cash = daily_sales.cash_sales if daily_sales else None
+    original_card = daily_sales.credit_card_sales if daily_sales else None
+    original_earnings = ({field: str(getattr(earning, field))
+                          for field in ("cash_pay", "card_tips", "cash_tips")}
+                         if earning else None)
+
+    if is_manager and (daily_sales is None or daily_sales.is_drawer_closeout):
+        sales_locked = True
+
     if request.method == "POST":
+
+        if daily_sales is None:
+            messages.error(request, "Enter the drawer closeout using Sales entry first.")
+            return redirect("enter_today")
+
+        if not is_manager and daily_sales is None:
+            messages.error(request, "A manager must enter today's sales first.")
+            return redirect("enter_today")
 
         sales_form = DailySalesForm(
             request.POST,
@@ -124,13 +165,13 @@ def enter_today(request):
                 if not sales_locked:
 
                     previous_cash = (
-                        daily_sales.cash_sales
+                        original_cash
                         if daily_sales
                         else None
                     )
 
                     previous_card = (
-                        daily_sales.credit_card_sales
+                        original_card
                         if daily_sales
                         else None
                     )
@@ -216,6 +257,8 @@ def enter_today(request):
                                 earning.cash_tips
                             ),
                         }
+
+                    previous_values = original_earnings
 
                     employee_earning = (
                         earning_form.save(commit=False)
@@ -473,8 +516,8 @@ def reports(request, period="weekly"):
         )
 
         total_sales = (
-            sales.cash_sales
-            + sales.credit_card_sales
+            sales.sales_cash
+            + sales.sales_card
         )
 
         employee_earnings = (
@@ -484,19 +527,19 @@ def reports(request, period="weekly"):
         )
 
         expected_cash_deposit = (
-            sales.cash_sales
+            sales.sales_cash
             - employee_pay
             - card_tips
         )
 
         gross_card_batch = (
-            sales.credit_card_sales
+            sales.sales_card
             + card_tips
         )
 
         net_daily_proceeds = (
-            sales.cash_sales
-            + sales.credit_card_sales
+            sales.sales_cash
+            + sales.sales_card
             - employee_pay
         )
 
@@ -505,9 +548,9 @@ def reports(request, period="weekly"):
                 "business_date":
                     sales.business_date,
                 "cash_sales":
-                    sales.cash_sales,
+                    sales.sales_cash,
                 "credit_card_sales":
-                    sales.credit_card_sales,
+                    sales.sales_card,
                 "total_sales":
                     total_sales,
                 "employee_pay":
@@ -526,11 +569,11 @@ def reports(request, period="weekly"):
         )
 
         summary["cash_sales"] += (
-            sales.cash_sales
+            sales.sales_cash
         )
 
         summary["credit_card_sales"] += (
-            sales.credit_card_sales
+            sales.sales_card
         )
 
         summary["total_sales"] += (
@@ -1441,6 +1484,7 @@ def deactivate_employee(request, employee_id):
 
 
 @login_required
+@editable_business_date
 def manager_employee_earnings(request):
 
     role = get_role(request.user)
@@ -1586,6 +1630,7 @@ def manager_employee_earnings(request):
 
 
 @login_required
+@editable_business_date
 def manager_add_employee_earnings(request):
 
     role = get_role(request.user)
@@ -1922,3 +1967,73 @@ def edit_employee(request, employee_id):
             "form": form,
         },
     )
+
+
+@login_required
+@editable_business_date
+@transaction.atomic
+def manage_sales(request):
+    """Manager sales entry/correction, including historical business dates."""
+    from .forms import HistoricalSalesForm, DrawerCloseoutForm
+    if get_role(request.user) != "Manager" and not request.user.is_superuser:
+        return HttpResponseForbidden("Only managers can change sales.")
+    selected = request.POST.get("business_date") if request.method == "POST" else request.GET.get("date")
+    try:
+        selected = date.fromisoformat(selected) if selected else timezone.localdate()
+    except ValueError:
+        selected = None
+    sales = (DailySales.objects.select_for_update().filter(business_date=selected).first()
+             if selected else None)
+    fields = ("starting_cash", "ending_cash", "card_batch_total") if sales is None or sales.is_drawer_closeout else ("cash_sales", "credit_card_sales")
+    previous = ({name: str(getattr(sales, name)) for name in fields}
+                if sales else None)
+    form_class = DrawerCloseoutForm if sales is None or sales.is_drawer_closeout else HistoricalSalesForm
+    form = form_class(request.POST if request.method == "POST" else None,
+                               instance=sales, initial={"business_date": selected})
+    if request.method == "POST" and form.is_valid():
+        record = form.save(commit=False)
+        if sales:
+            record.last_modified_by = request.user
+        else:
+            record.entered_by = request.user
+        record.save()
+        new = {name: str(getattr(record, name)) for name in fields}
+        if previous != new:
+            ActivityLog.objects.create(actor=request.user,
+                action=ActivityLog.Action.UPDATE if sales else ActivityLog.Action.CREATE,
+                object_type="DailySales", object_id=str(record.pk),
+                description=f"Sales saved for {record.business_date}.",
+                details={"previous": previous, "new": new})
+        messages.success(request, "Sales saved.")
+        return redirect(f"{reverse('manage_sales')}?date={record.business_date}")
+    return render(request, "core/manage_sales.html", {"form": form, "sales": sales})
+
+
+@login_required
+@transaction.atomic
+def closeout_status(request, sales_id):
+    if get_role(request.user) != "Manager" and not request.user.is_superuser:
+        return HttpResponseForbidden("Only managers can finalize or reopen closeouts.")
+    if request.method != "POST":
+        return HttpResponseForbidden("Use the closeout action form.")
+    from django.shortcuts import get_object_or_404
+    sales = get_object_or_404(DailySales.objects.select_for_update(), pk=sales_id)
+    action = request.POST.get("action")
+    if action not in ("finalize", "reopen"):
+        return HttpResponseForbidden("Unknown closeout action.")
+    if action == "finalize" and not sales.finalized_at:
+        if sales.is_drawer_closeout and sales.total_card_tips > sales.card_batch_total:
+            messages.error(request, "Card tips exceed the card batch. Correct the entries before finalizing.")
+            return redirect(f"{reverse('manage_sales')}?date={sales.business_date}")
+        sales.finalized_at = timezone.now()
+    elif action == "reopen" and sales.finalized_at:
+        sales.finalized_at = None
+    else:
+        return redirect("manage_sales")
+    sales.save(update_fields=["finalized_at", "updated_at"])
+    ActivityLog.objects.create(actor=request.user, action=ActivityLog.Action.UPDATE,
+        object_type="DailySales", object_id=str(sales.pk),
+        description=f"Closeout {action} for {sales.business_date}.",
+        details={"transition": action, "business_date": str(sales.business_date)})
+    messages.success(request, "Closeout finalized." if action == "finalize" else "Closeout reopened.")
+    return redirect("manage_sales")

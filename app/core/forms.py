@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from django import forms
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 from .models import DailySales, Employee, EmployeeEarning
 
@@ -297,6 +299,15 @@ class EmployeeCreateForm(forms.Form):
                 "Passwords do not match.",
             )
 
+        if password:
+            candidate = User(username=cleaned_data.get("username", ""),
+                             first_name=cleaned_data.get("first_name", ""),
+                             last_name=cleaned_data.get("last_name", ""))
+            try:
+                validate_password(password, candidate)
+            except ValidationError as exc:
+                self.add_error("password", exc)
+
         return cleaned_data
 
 
@@ -519,3 +530,25 @@ class EmployeeEditForm(forms.Form):
             )
 
         return employee_number
+
+
+class HistoricalSalesForm(DailySalesForm):
+    business_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+
+    class Meta(DailySalesForm.Meta):
+        fields = ["business_date", "cash_sales", "credit_card_sales"]
+
+
+class DrawerCloseoutForm(forms.ModelForm):
+    class Meta:
+        model = DailySales
+        fields = ["business_date", "starting_cash", "ending_cash", "card_batch_total"]
+        labels = {"starting_cash": "Starting cash retained in drawer",
+                  "ending_cash": "Ending cash count AFTER payouts (including starting cash)",
+                  "card_batch_total": "Card batch total INCLUDING card tips"}
+        widgets = {"business_date": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in ("starting_cash", "ending_cash", "card_batch_total"):
+            self.fields[field].required = True

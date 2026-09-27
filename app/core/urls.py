@@ -4,6 +4,8 @@ from . import views
 
 
 urlpatterns = [
+    path("manager/closeout/<int:sales_id>/status/", views.closeout_status, name="closeout_status"),
+    path("manager/sales/", views.manage_sales, name="manage_sales"),
 
     path(
         "",

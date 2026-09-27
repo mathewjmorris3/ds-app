@@ -6,6 +6,7 @@ Dashboard | DS Business Management
 
 
 {% block content %}
+{% if role == "Manager" or request.user.is_superuser %}<p><a href="{% url 'manage_sales' %}">Sales entry and historical corrections</a></p>{% endif %}
 
 
 <div class="page-header">

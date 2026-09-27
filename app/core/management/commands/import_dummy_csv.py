@@ -179,6 +179,10 @@ class Command(BaseCommand):
                             f"different sales amounts."
                         )
 
+                daily_sales = DailySales.objects.select_for_update().get(pk=daily_sales.pk)
+                if daily_sales.finalized_at or daily_sales.is_drawer_closeout:
+                    raise CommandError(f"Row {row_number}: importer only supports open legacy sales records.")
+
                 earning, created = (
                     EmployeeEarning.objects.update_or_create(
                         daily_sales=daily_sales,

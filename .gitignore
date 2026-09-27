@@ -4,7 +4,22 @@
 
 .env
 .env.*
+*.env
+*.env.*
 !.env.example
+!*.env.example
+
+# Production configuration belongs in /etc/dsapp, never in this checkout.
+/etc/dsapp/
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+id_ecdsa*
 
 
 # =========================================================
@@ -17,6 +32,22 @@ backups/*
 *.dump
 *.sql
 *.sql.gz
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db
+*.db-*
+*.backup
+*.bak
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.dump.*
+*.sql.*
+*.partial
 
 
 # =========================================================
@@ -25,6 +56,9 @@ backups/*
 
 app/import_data/
 *.csv
+media/
+uploads/
+private_uploads/
 
 
 # =========================================================
@@ -32,6 +66,9 @@ app/import_data/
 # =========================================================
 
 certs/
+caddy_data/
+caddy_config/
+postgres_data/
 
 
 # =========================================================
@@ -70,6 +107,11 @@ Thumbs.db
 # =========================================================
 
 *.log
+*.log.*
+logs/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Local configuration backups
 compose.yaml.pre-*

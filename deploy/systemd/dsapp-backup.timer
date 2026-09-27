@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Daiquiri Station database backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 America/Chicago
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

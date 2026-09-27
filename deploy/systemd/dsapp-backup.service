@@ -1,0 +1,18 @@
+[Unit]
+Description=Daiquiri Station PostgreSQL backup to mounted storage
+After=postgresql.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dsapp
+Group=dsapp
+EnvironmentFile=/etc/dsapp/app.env
+EnvironmentFile=/etc/dsapp/backup.env
+ExecStart=/usr/bin/python3 /opt/ds-app/scripts/backup_native.py
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+TimeoutStartSec=2h

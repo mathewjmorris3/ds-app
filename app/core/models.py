@@ -113,6 +113,32 @@ class DailySales(models.Model):
     class Meta:
         ordering = ["-business_date"]
 
+    finalized_at = models.DateTimeField(null=True, blank=True)
+
+    # Null identifies legacy records whose sales were entered before tips/float.
+    starting_cash = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))])
+    ending_cash = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))])
+    card_batch_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))])
+
+    @property
+    def is_drawer_closeout(self):
+        return self.starting_cash is not None
+
+    @property
+    def sales_cash(self):
+        if self.is_drawer_closeout:
+            return self.ending_cash - self.starting_cash + self.total_employee_pay + self.total_card_tips
+        return self.cash_sales
+
+    @property
+    def sales_card(self):
+        if self.is_drawer_closeout:
+            return self.card_batch_total - self.total_card_tips
+        return self.credit_card_sales
+
     def _earning_total(self, field_name):
         result = self.employee_earnings.aggregate(
             total=Sum(field_name, default=Decimal("0.00"))
@@ -121,7 +147,7 @@ class DailySales(models.Model):
 
     @property
     def total_sales(self):
-        return self.cash_sales + self.credit_card_sales
+        return self.sales_cash + self.sales_card
 
     @property
     def total_employee_pay(self):
@@ -145,6 +171,8 @@ class DailySales(models.Model):
 
     @property
     def expected_cash_deposit(self):
+        if self.is_drawer_closeout:
+            return self.ending_cash - self.starting_cash
         return (
             self.cash_sales
             - self.total_employee_pay
@@ -153,13 +181,13 @@ class DailySales(models.Model):
 
     @property
     def gross_card_batch(self):
-        return self.credit_card_sales + self.total_card_tips
+        return self.card_batch_total if self.is_drawer_closeout else self.credit_card_sales + self.total_card_tips
 
     @property
     def net_daily_proceeds(self):
         return (
-            self.cash_sales
-            + self.credit_card_sales
+            self.sales_cash
+            + self.sales_card
             - self.total_employee_pay
         )
 

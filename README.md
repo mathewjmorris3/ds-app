@@ -2,7 +2,9 @@
 
 A self-hosted business management application for recording daily sales, employee earnings, tips, employee information, reporting, and activity history.
 
-The application is designed to run on a private local network using Docker on an Ubuntu Server virtual machine.
+The target deployment is a permanent Ubuntu server on a private local network, using Django, PostgreSQL, Caddy and systemd without Docker.
+
+Start with [native Ubuntu installation and recovery](docs/UBUNTU.md) and [implementation status and financial rules](docs/STATUS.md). The Docker instructions below are retained as legacy deployment documentation.
 
 ## Purpose
 
@@ -644,10 +646,10 @@ Current major components:
 - [x] Gunicorn production application server
 - [x] Caddy HTTPS reverse proxy
 - [x] Local DNS
-- [x] Automated PostgreSQL backups
+- [ ] Automatic backups (disabled until USB/NAS destination is configured)
 - [ ] Backup restore testing
 - [ ] Ubuntu firewall hardening
-- [ ] Fully portable deployment configuration
+- [x] Safe resume scripts for inspecting and completing native deployment
 - [ ] Business production deployment
 - [ ] Production recovery documentation
 

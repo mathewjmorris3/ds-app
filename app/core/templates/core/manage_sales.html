@@ -1,0 +1,15 @@
+{% extends "core/base.html" %}
+{% block content %}
+<h1>Sales entry and corrections</h1>
+<p>For new dates, enter the drawer count after cash pay and card-tip payouts, starting cash retained, and the card batch including tips. Enter pay and tips on the earnings screens. Legacy dates retain sales-before-tips fields. Select a date to review existing values before correcting them.</p>
+<form method="get"><label>Business date <input type="date" name="date" required></label><button type="submit">Load date</button></form>
+{% if sales.finalized_at %}<p>Finalized {{ sales.finalized_at }}. Reopen before making corrections.</p>{% else %}<form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Save sales</button></form>{% endif %}
+{% if sales %}
+<p>Expected cash deposit: ${{ sales.expected_cash_deposit|floatformat:2 }}. Card batch: ${{ sales.gross_card_batch|floatformat:2 }}.</p>
+<p>Before finalizing, confirm all employees’ pay and tips have been entered and the counts are correct.</p>
+<form method="post" action="{% url 'closeout_status' sales.pk %}">{% csrf_token %}
+{% if sales.finalized_at %}<button name="action" value="reopen">Reopen for corrections</button>
+{% else %}<button name="action" value="finalize">Finalize closeout</button>{% endif %}
+</form>
+{% endif %}
+{% endblock %}

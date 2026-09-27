@@ -1,0 +1,19 @@
+# Replace hostname, server LAN address, and allowed subnet before installation.
+{
+    auto_https disable_redirects
+}
+dsapp.home.arpa {
+    bind 192.168.0.11
+    tls internal
+    @outside not remote_ip 192.168.0.0/24
+    route {
+        respond @outside "LAN access only" 403
+        handle_path /static/* {
+            root * /var/lib/dsapp/static
+            file_server
+        }
+        handle {
+            reverse_proxy 127.0.0.1:8000
+        }
+    }
+}
