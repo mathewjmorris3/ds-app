@@ -175,8 +175,8 @@ DB_EXISTS="$(
     fail "PostgreSQL database dsapp unexpectedly already exists."
 
 ROLE_SQL="$(mktemp /run/dsapp-bootstrap-role.XXXXXX)"
-chmod postgres:postgres "$ROLE_SQL"
-chown 0600 "$ROLE_SQL"
+chown postgres:postgres "$ROLE_SQL"
+chmod 0600 "$ROLE_SQL"
 
 printf "CREATE ROLE dsapp LOGIN PASSWORD '%s' NOSUPERUSER NOCREATEDB NOCREATEROLE;\n" \
     "$POSTGRES_PASSWORD" > "$ROLE_SQL"
