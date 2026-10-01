@@ -216,16 +216,6 @@ unset DJANGO_SECRET_KEY
 unset POSTGRES_PASSWORD
 
 # ---------------------------------------------------------
-# Install initial Caddy configuration
-# ---------------------------------------------------------
-
-printf '%s\n' 'Preparing Caddy configuration...'
-
-if [[ -f "$REPO/deploy/Caddyfile" ]]; then
-    cp "$REPO/deploy/Caddyfile" /etc/caddy/Caddyfile
-fi
-
-# ---------------------------------------------------------
 # Install systemd application unit
 # ---------------------------------------------------------
 
