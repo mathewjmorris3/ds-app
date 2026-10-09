@@ -225,13 +225,43 @@ Print
 
 
 <div class="card">
+    <h2>Daily Financial Summary</h2>
+    <p>Consolidated financial entries only. Historical records are shown separately below;
+       their new inputs are unavailable. Manual pay and tips are not added to employee earnings.</p>
+    <div class="grid grid-auto">
+        {% for label, amount in financial_totals %}
+        <div class="metric {% if label == 'Cash Deposit' %}metric-highlight{% endif %}">
+            <div class="metric-label">{{ label }}</div>
+            <div class="metric-value">${{ amount|floatformat:"2g" }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="table-wrapper">
+        <table class="report-table">
+            <thead><tr>
+                <th>Date</th>
+                {% for name, label in financial_columns %}<th>{{ label }}</th>{% endfor %}
+            </tr></thead>
+            <tbody>
+                {% for row in financial_rows %}
+                <tr>
+                    <td>{{ row.business_date|date:"M j, Y" }}</td>
+                    {% for amount in row.amounts %}<td class="money">${{ amount|floatformat:"2g" }}</td>{% endfor %}
+                </tr>
+                {% empty %}<tr><td colspan="9">No consolidated financial entries in this period.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
 
 <h2 class="card-title">
-Business Summary
+Historical Business Summary
 </h2>
 
 <p class="card-subtitle">
-Totals for the selected reporting period.
+Original accounting totals for historical records only.
 </p>
 
 
@@ -377,7 +407,7 @@ ${{ summary.net_daily_proceeds|floatformat:2 }}
 <div class="card">
 
 <h2 class="card-title">
-Daily Breakdown
+Historical Daily Breakdown
 </h2>
 
 

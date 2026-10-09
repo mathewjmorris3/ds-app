@@ -1,15 +1,59 @@
 {% extends "core/base.html" %}
+{% load static %}
+{% block title %}Daily Data | DS Business Management{% endblock %}
+{% block extra_head %}
+<style>
+.financial-layout {display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:24px}
+.financial-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.financial-fields input {width:100%;box-sizing:border-box}
+.deposit-result {font-size:2rem;font-weight:700;padding:20px;background:#e8f5ed;color:#173d26;border-radius:8px}
+.total-line {display:flex;justify-content:space-between;gap:20px;margin:20px 0}
+.errorlist, .deposit-warning {color:#a32020}
+@media(max-width:700px){.financial-layout,.financial-fields{grid-template-columns:1fr}}
+</style>
+{% endblock %}
 {% block content %}
-<h1>Sales entry and corrections</h1>
-<p>For new dates, enter the drawer count after cash pay and card-tip payouts, starting cash retained, and the card batch including tips. Enter pay and tips on the earnings screens. Legacy dates retain sales-before-tips fields. Select a date to review existing values before correcting them.</p>
-<form method="get"><label>Business date <input type="date" name="date" required></label><button type="submit">Load date</button></form>
-{% if sales.finalized_at %}<p>Finalized {{ sales.finalized_at }}. Reopen before making corrections.</p>{% else %}<form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Save sales</button></form>{% endif %}
-{% if sales %}
-<p>Expected cash deposit: ${{ sales.expected_cash_deposit|floatformat:2 }}. Card batch: ${{ sales.gross_card_batch|floatformat:2 }}.</p>
-<p>Before finalizing, confirm all employees’ pay and tips have been entered and the counts are correct.</p>
-<form method="post" action="{% url 'closeout_status' sales.pk %}">{% csrf_token %}
-{% if sales.finalized_at %}<button name="action" value="reopen">Reopen for corrections</button>
-{% else %}<button name="action" value="finalize">Finalize closeout</button>{% endif %}
+<h1>Daily Data</h1>
+<form method="get" class="inline-form"><label for="load-date">Load date for review or editing</label><input id="load-date" type="date" name="date" required><button type="submit">Load date</button></form>
+{% if not financial %}
+<p>This historical record retains its original accounting rules. New financial inputs and totals are unavailable; no historical values have been converted.</p>
+{% endif %}
+{% if sales.finalized_at %}
+<p>Finalized {{ sales.finalized_at }}. Reopen before making corrections.</p>
+{% else %}
+<form method="post" id="financial-entry">{% csrf_token %}
+{{ form.non_field_errors }}{{ form.record_id }}
+{% if financial and sales %}<input type="hidden" name="business_date" value="{{ sales.business_date|date:'Y-m-d' }}">{% endif %}
+<div class="financial-layout">
+<section class="card">
+<h2>Daily Financial Entry</h2>
+<div class="financial-fields">
+{% for field in form.visible_fields %}
+<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}</div>
+{% endfor %}
+</div>
+<button type="submit">{% if sales %}Save changes{% else %}Save{% endif %}</button>
+</section>
+{% if financial %}
+<section class="card" aria-live="polite">
+<h2>Calculated Totals</h2>
+<div class="total-line"><span>Subtotal</span><output id="subtotal">—</output></div>
+<div class="total-line"><span>Total Deposit</span><output id="total-deposit">—</output></div>
+<p>Cash Deposit</p><div class="deposit-result"><output id="cash-deposit">—</output></div>
+<p id="deposit-warning" class="deposit-warning" hidden>Negative cash deposit: review the financial inputs.</p>
+<p class="help">Subtotal = register cash + card charges.<br>Total Deposit = subtotal + card tips.<br>Cash Deposit = total deposit − employee pay − starting cash − card charges.</p>
+</section>
+{% endif %}
+</div>
 </form>
 {% endif %}
+{% if sales %}
+{% if financial %}<p>Saved totals: Subtotal ${{ sales.subtotal|floatformat:"2g" }} · Total Deposit ${{ sales.total_deposit|floatformat:"2g" }} · Cash Deposit <strong>${{ sales.cash_deposit|floatformat:"2g" }}</strong></p>
+{% else %}<p>Historical expected cash deposit: ${{ sales.expected_cash_deposit|floatformat:"2g" }}.</p>{% endif %}
+<p>Individual pay and tips remain available on <a href="{% url 'enter_today' %}">My daily earnings</a> and <a href="{% url 'manager_employee_earnings' %}">Employee Pay &amp; Tips</a>. Daily manual totals are not added to those records.</p>
+<form method="post" action="{% url 'closeout_status' sales.pk %}">{% csrf_token %}
+{% if sales.finalized_at %}<button name="action" value="reopen">Reopen for corrections</button>{% else %}<button name="action" value="finalize">Finalize closeout</button>{% endif %}
+</form>
+{% endif %}
+{% if financial %}<script src="{% static 'core/daily_financial.js' %}" defer></script>{% endif %}
 {% endblock %}

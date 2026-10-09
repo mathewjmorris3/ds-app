@@ -61,6 +61,10 @@ class FinancialReadOnlyAdmin(admin.ModelAdmin):
 class DailySalesAdmin(FinancialReadOnlyAdmin):
     list_display = (
         "business_date",
+        "is_financial_entry",
+        "subtotal",
+        "total_deposit",
+        "cash_deposit",
         "cash_sales",
         "credit_card_sales",
         "total_sales",
@@ -77,6 +81,9 @@ class DailySalesAdmin(FinancialReadOnlyAdmin):
     readonly_fields = (
         "created_at",
         "updated_at",
+        "subtotal",
+        "total_deposit",
+        "cash_deposit",
     )
 
 

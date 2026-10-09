@@ -7,7 +7,7 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -123,7 +123,7 @@ def enter_today(request):
                           for field in ("cash_pay", "card_tips", "cash_tips")}
                          if earning else None)
 
-    if is_manager and (daily_sales is None or daily_sales.is_drawer_closeout):
+    if is_manager and (daily_sales is None or daily_sales.is_drawer_closeout or daily_sales.is_financial_entry):
         sales_locked = True
 
     if request.method == "POST":
@@ -482,6 +482,19 @@ def reports(request, period="weekly"):
         "net_daily_proceeds": zero,
     }
 
+    financial_rows = []
+    financial_columns = (
+        ("register_cash", "Total Cash from Register"),
+        ("card_charges", "Credit Card Charges Without Fee"),
+        ("daily_card_tips", "Credit Card Tips"),
+        ("daily_employee_pay", "Employee Pay"),
+        ("starting_cash", "Starting Cash"),
+        ("subtotal", "Subtotal"),
+        ("total_deposit", "Total Deposit"),
+        ("cash_deposit", "Cash Deposit"),
+    )
+    financial_fields = tuple(name for name, label in financial_columns)
+    financial_summary = {name: zero for name in financial_fields}
     daily_rows = []
     employee_totals = {}
 
@@ -515,98 +528,102 @@ def reports(request, period="weekly"):
             zero,
         )
 
-        total_sales = (
-            sales.sales_cash
-            + sales.sales_card
-        )
+        if sales.is_financial_entry:
+            row = {name: getattr(sales, name) for name in financial_fields}
+            row["business_date"] = sales.business_date
+            row["amounts"] = [row[name] for name in financial_fields]
+            financial_rows.append(row)
+            for name in financial_fields:
+                financial_summary[name] += row[name]
+        else:
+            total_sales = (
+                sales.sales_cash
+                + sales.sales_card
+            )
 
-        employee_earnings = (
-            employee_pay
-            + card_tips
-            + cash_tips
-        )
+            employee_earnings = (
+                employee_pay
+                + card_tips
+                + cash_tips
+            )
 
-        expected_cash_deposit = (
-            sales.sales_cash
-            - employee_pay
-            - card_tips
-        )
+            expected_cash_deposit = sales.expected_cash_deposit
 
-        gross_card_batch = (
-            sales.sales_card
-            + card_tips
-        )
+            gross_card_batch = (
+                sales.sales_card
+                + card_tips
+            )
 
-        net_daily_proceeds = (
-            sales.sales_cash
-            + sales.sales_card
-            - employee_pay
-        )
+            net_daily_proceeds = (
+                sales.sales_cash
+                + sales.sales_card
+                - employee_pay
+            )
 
-        daily_rows.append(
-            {
-                "business_date":
-                    sales.business_date,
-                "cash_sales":
-                    sales.sales_cash,
-                "credit_card_sales":
-                    sales.sales_card,
-                "total_sales":
-                    total_sales,
-                "employee_pay":
-                    employee_pay,
-                "card_tips":
-                    card_tips,
-                "cash_tips":
-                    cash_tips,
-                "expected_cash_deposit":
-                    expected_cash_deposit,
-                "gross_card_batch":
-                    gross_card_batch,
-                "net_daily_proceeds":
-                    net_daily_proceeds,
-            }
-        )
+            daily_rows.append(
+                {
+                    "business_date":
+                        sales.business_date,
+                    "cash_sales":
+                        sales.sales_cash,
+                    "credit_card_sales":
+                        sales.sales_card,
+                    "total_sales":
+                        total_sales,
+                    "employee_pay":
+                        employee_pay,
+                    "card_tips":
+                        card_tips,
+                    "cash_tips":
+                        cash_tips,
+                    "expected_cash_deposit":
+                        expected_cash_deposit,
+                    "gross_card_batch":
+                        gross_card_batch,
+                    "net_daily_proceeds":
+                        net_daily_proceeds,
+                }
+            )
 
-        summary["cash_sales"] += (
-            sales.sales_cash
-        )
+            summary["cash_sales"] += (
+                sales.sales_cash
+            )
 
-        summary["credit_card_sales"] += (
-            sales.sales_card
-        )
+            summary["credit_card_sales"] += (
+                sales.sales_card
+            )
 
-        summary["total_sales"] += (
-            total_sales
-        )
+            summary["total_sales"] += (
+                total_sales
+            )
 
-        summary["employee_pay"] += (
-            employee_pay
-        )
+            summary["employee_pay"] += (
+                employee_pay
+            )
 
-        summary["card_tips"] += (
-            card_tips
-        )
+            summary["card_tips"] += (
+                card_tips
+            )
 
-        summary["cash_tips"] += (
-            cash_tips
-        )
+            summary["cash_tips"] += (
+                cash_tips
+            )
 
-        summary["employee_earnings"] += (
-            employee_earnings
-        )
+            summary["employee_earnings"] += (
+                employee_earnings
+            )
 
-        summary["expected_cash_deposit"] += (
-            expected_cash_deposit
-        )
+            summary["expected_cash_deposit"] += (
+                expected_cash_deposit
+            )
 
-        summary["gross_card_batch"] += (
-            gross_card_batch
-        )
+            summary["gross_card_batch"] += (
+                gross_card_batch
+            )
 
-        summary["net_daily_proceeds"] += (
-            net_daily_proceeds
-        )
+            summary["net_daily_proceeds"] += (
+                net_daily_proceeds
+            )
 
         for earning in earnings:
 
@@ -676,6 +693,10 @@ def reports(request, period="weekly"):
             "end_date": end_date,
             "summary": summary,
             "daily_rows": daily_rows,
+            "financial_rows": financial_rows,
+            "financial_summary": financial_summary,
+            "financial_columns": financial_columns,
+            "financial_totals": [(label, financial_summary[name]) for name, label in financial_columns],
             "employee_rows": employee_rows,
         },
     )
@@ -1974,7 +1995,7 @@ def edit_employee(request, employee_id):
 @transaction.atomic
 def manage_sales(request):
     """Manager sales entry/correction, including historical business dates."""
-    from .forms import HistoricalSalesForm, DrawerCloseoutForm
+    from .forms import HistoricalSalesForm, DrawerCloseoutForm, DailyFinancialForm
     if get_role(request.user) != "Manager" and not request.user.is_superuser:
         return HttpResponseForbidden("Only managers can change sales.")
     selected = request.POST.get("business_date") if request.method == "POST" else request.GET.get("date")
@@ -1984,29 +2005,46 @@ def manage_sales(request):
         selected = None
     sales = (DailySales.objects.select_for_update().filter(business_date=selected).first()
              if selected else None)
-    fields = ("starting_cash", "ending_cash", "card_batch_total") if sales is None or sales.is_drawer_closeout else ("cash_sales", "credit_card_sales")
-    previous = ({name: str(getattr(sales, name)) for name in fields}
-                if sales else None)
-    form_class = DrawerCloseoutForm if sales is None or sales.is_drawer_closeout else HistoricalSalesForm
+    financial = sales is None or sales.is_financial_entry
+    fields = (["business_date", "register_cash", "card_charges", "daily_card_tips",
+               "daily_employee_pay", "starting_cash"] if financial else
+              ["starting_cash", "ending_cash", "card_batch_total"] if sales.is_drawer_closeout else
+              ["cash_sales", "credit_card_sales"])
+    def snapshot(record):
+        values = {name: str(getattr(record, name)) for name in fields}
+        if record.is_financial_entry:
+            values.update({name: str(getattr(record, name)) for name in
+                           ("subtotal", "total_deposit", "cash_deposit")})
+        return values
+    previous = snapshot(sales) if sales else None
+    form_class = DailyFinancialForm if financial else DrawerCloseoutForm if sales.is_drawer_closeout else HistoricalSalesForm
     form = form_class(request.POST if request.method == "POST" else None,
-                               instance=sales, initial={"business_date": selected})
+                      instance=sales, initial={"business_date": selected})
     if request.method == "POST" and form.is_valid():
         record = form.save(commit=False)
         if sales:
             record.last_modified_by = request.user
         else:
             record.entered_by = request.user
-        record.save()
-        new = {name: str(getattr(record, name)) for name in fields}
-        if previous != new:
-            ActivityLog.objects.create(actor=request.user,
-                action=ActivityLog.Action.UPDATE if sales else ActivityLog.Action.CREATE,
-                object_type="DailySales", object_id=str(record.pk),
-                description=f"Sales saved for {record.business_date}.",
-                details={"previous": previous, "new": new})
-        messages.success(request, "Sales saved.")
-        return redirect(f"{reverse('manage_sales')}?date={record.business_date}")
-    return render(request, "core/manage_sales.html", {"form": form, "sales": sales})
+        try:
+            with transaction.atomic():
+                record.save()
+        except IntegrityError:
+            form.add_error(None, "A closeout already exists for this date. Load it before editing.")
+        else:
+            new = snapshot(record)
+            if previous != new:
+                ActivityLog.objects.create(actor=request.user,
+                    action=ActivityLog.Action.UPDATE if sales else ActivityLog.Action.CREATE,
+                    object_type="DailySales", object_id=str(record.pk),
+                    description=f"Daily data saved for {record.business_date}.",
+                    details={"previous": previous, "new": new})
+            messages.success(request, "Daily data saved.")
+            if record.is_financial_entry and record.cash_deposit < 0:
+                messages.warning(request, "Negative cash deposit: review the financial inputs before finalizing.")
+            return redirect(f"{reverse('manage_sales')}?date={record.business_date}")
+    return render(request, "core/manage_sales.html", {"form": form, "sales": sales, "financial": financial})
+
 
 
 @login_required
@@ -2024,6 +2062,9 @@ def closeout_status(request, sales_id):
     if action == "finalize" and not sales.finalized_at:
         if sales.is_drawer_closeout and sales.total_card_tips > sales.card_batch_total:
             messages.error(request, "Card tips exceed the card batch. Correct the entries before finalizing.")
+            return redirect(f"{reverse('manage_sales')}?date={sales.business_date}")
+        if sales.is_financial_entry and sales.cash_deposit < 0:
+            messages.error(request, "Negative cash deposit requires correction before finalizing.")
             return redirect(f"{reverse('manage_sales')}?date={sales.business_date}")
         sales.finalized_at = timezone.now()
     elif action == "reopen" and sales.finalized_at:

@@ -112,6 +112,23 @@ class DailySales(models.Model):
 
     class Meta:
         ordering = ["-business_date"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(register_cash__isnull=True, card_charges__isnull=True,
+                             daily_card_tips__isnull=True, daily_employee_pay__isnull=True)
+                    | models.Q(register_cash__isnull=False, card_charges__isnull=False,
+                               daily_card_tips__isnull=False, daily_employee_pay__isnull=False,
+                               starting_cash__isnull=False, ending_cash__isnull=True,
+                               card_batch_total__isnull=True)
+                ), name="complete_daily_financial_inputs"),
+            models.CheckConstraint(
+                condition=(models.Q(register_cash__isnull=True) |
+                           models.Q(register_cash__gte=0, card_charges__gte=0,
+                                    daily_card_tips__gte=0, daily_employee_pay__gte=0,
+                                    starting_cash__gte=0)),
+                name="nonnegative_daily_financial_inputs"),
+        ]
 
     finalized_at = models.DateTimeField(null=True, blank=True)
 
@@ -123,18 +140,50 @@ class DailySales(models.Model):
     card_batch_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
         validators=[MinValueValidator(Decimal("0.00"))])
 
+    # NULL preserves the accounting meaning of pre-consolidation records.
+    register_cash = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))])
+    card_charges = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))])
+    daily_card_tips = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))])
+    daily_employee_pay = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))])
+
+    @property
+    def is_financial_entry(self):
+        return self.register_cash is not None
+
+    @property
+    def subtotal(self):
+        return self.register_cash + self.card_charges if self.is_financial_entry else None
+
+    @property
+    def total_deposit(self):
+        return self.subtotal + self.daily_card_tips if self.is_financial_entry else None
+
+    @property
+    def cash_deposit(self):
+        if self.is_financial_entry:
+            return self.total_deposit - self.daily_employee_pay - self.starting_cash - self.card_charges
+        return None
+
     @property
     def is_drawer_closeout(self):
-        return self.starting_cash is not None
+        return self.starting_cash is not None and not self.is_financial_entry
 
     @property
     def sales_cash(self):
+        if self.is_financial_entry:
+            return self.register_cash
         if self.is_drawer_closeout:
             return self.ending_cash - self.starting_cash + self.total_employee_pay + self.total_card_tips
         return self.cash_sales
 
     @property
     def sales_card(self):
+        if self.is_financial_entry:
+            return self.card_charges
         if self.is_drawer_closeout:
             return self.card_batch_total - self.total_card_tips
         return self.credit_card_sales
@@ -171,6 +220,8 @@ class DailySales(models.Model):
 
     @property
     def expected_cash_deposit(self):
+        if self.is_financial_entry:
+            return self.cash_deposit
         if self.is_drawer_closeout:
             return self.ending_cash - self.starting_cash
         return (
@@ -181,10 +232,14 @@ class DailySales(models.Model):
 
     @property
     def gross_card_batch(self):
+        if self.is_financial_entry:
+            return self.card_charges + self.daily_card_tips
         return self.card_batch_total if self.is_drawer_closeout else self.credit_card_sales + self.total_card_tips
 
     @property
     def net_daily_proceeds(self):
+        if self.is_financial_entry:
+            return self.total_deposit - self.daily_employee_pay
         return (
             self.sales_cash
             + self.sales_card

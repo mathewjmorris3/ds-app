@@ -105,11 +105,11 @@ class BusinessTests(TestCase):
 
     def test_after_payout_drawer_closeout_and_inclusive_card_batch(self):
         self.login('Manager')
-        response = self.client.post(reverse('manage_sales'), {
-            'business_date': '2024-03-01', 'starting_cash': '100.00',
-            'ending_cash': '350.00', 'card_batch_total': '220.00'})
-        self.assertEqual(response.status_code, 302)
-        sales = DailySales.objects.get(business_date=date(2024, 3, 1))
+        sales = DailySales.objects.create(business_date=date(2024, 3, 1),
+            starting_cash=D('100.00'), ending_cash=D('350.00'), card_batch_total=D('220.00'))
+        response = self.client.get(reverse('manage_sales'), {'date': '2024-03-01'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'historical record')
         EmployeeEarning.objects.create(daily_sales=sales, employee=self.earning.employee,
             cash_pay=D('50.00'), card_tips=D('20.00'), cash_tips=D('7.00'))
         self.assertEqual(sales.expected_cash_deposit, D('250.00'))
@@ -174,3 +174,204 @@ class BusinessTests(TestCase):
         self.users['Manager'].save(update_fields=['is_active'])
         self.client.post('/accounts/login/', {'username': 'Manager', 'password': 'test-password'})
         self.assertNotIn('_auth_user_id', self.client.session)
+
+
+class DailyFinancialTests(TestCase):
+    setUp = BusinessTests.setUp
+    login = BusinessTests.login
+
+    def data(self, **changes):
+        values = {'business_date': '2024-03-04', 'register_cash': '850.00',
+                  'card_charges': '620.00', 'daily_card_tips': '95.00',
+                  'daily_employee_pay': '180.00', 'starting_cash': '205.00'}
+        values.update(changes)
+        return values
+
+    def save_financial(self, **changes):
+        self.login('Manager')
+        response = self.client.post(reverse('manage_sales'), self.data(**changes))
+        self.assertEqual(response.status_code, 302)
+        return DailySales.objects.get(business_date=self.data(**changes)['business_date'])
+
+    def test_example_persistence_and_independent_earnings(self):
+        record = self.save_financial(subtotal='1', total_deposit='2', cash_deposit='3')
+        for field, value in {'subtotal': '1470.00', 'total_deposit': '1565.00', 'cash_deposit': '560.00',
+                             'starting_cash': '205.00', 'register_cash': '850.00', 'card_charges': '620.00',
+                             'daily_card_tips': '95.00', 'daily_employee_pay': '180.00'}.items():
+            self.assertEqual(getattr(record, field), D(value))
+        self.assertFalse(record.employee_earnings.exists())
+        EmployeeEarning.objects.create(daily_sales=record, employee=self.earning.employee,
+                                      cash_pay=D('180'), card_tips=D('95'), cash_tips=D('12'))
+        self.assertEqual(record.cash_deposit, D('560.00'))
+        self.assertEqual(record.total_employee_earnings, D('287.00'))
+        self.assertEqual(EmployeeEarning.objects.get(pk=self.earning.pk).cash_pay, D('20.10'))
+        self.assertEqual(record.expected_cash_deposit, record.cash_deposit)
+        page = self.client.get(reverse('manage_sales'), {'date': record.business_date})
+        self.assertContains(page, 'Daily data saved.')
+        self.assertContains(page, 'Calculated Totals')
+        self.assertContains(page, 'daily_financial.js')
+        self.assertContains(page, 'type="hidden" name="business_date" value="2024-03-04"')
+
+    def test_local_date_and_starting_cash_defaults(self):
+        self.login('Manager')
+        self.sales.delete()
+        page = self.client.get(reverse('manage_sales'))
+        self.assertEqual(page.context['form']['business_date'].value(), timezone.localdate())
+        self.assertEqual(page.context['form']['starting_cash'].value(), D('205.00'))
+
+    def test_zero_and_exact_cents(self):
+        record = self.save_financial(register_cash='0', card_charges='0', daily_card_tips='0',
+                                     daily_employee_pay='0', starting_cash='0')
+        for field in ('subtotal', 'total_deposit', 'cash_deposit'):
+            self.assertEqual(getattr(record, field), D('0.00'))
+        record = self.save_financial(business_date='2024-03-05', register_cash='0.10',
+                                    card_charges='0.20', daily_card_tips='0.03',
+                                    daily_employee_pay='0.01', starting_cash='0.02')
+        self.assertEqual(record.subtotal, D('0.30'))
+        self.assertEqual(record.total_deposit, D('0.33'))
+        self.assertEqual(record.cash_deposit, D('0.10'))
+
+    def test_invalid_and_missing_inputs_are_not_rounded_or_defaulted(self):
+        from .forms import DailyFinancialForm
+        for field in ('register_cash', 'card_charges', 'daily_card_tips', 'daily_employee_pay', 'starting_cash'):
+            for invalid in ('', '-0.01', 'abc', 'NaN', 'Infinity', '0.001', '10000000000.00'):
+                with self.subTest(field=field, value=invalid):
+                    form = DailyFinancialForm(self.data(**{field: invalid}))
+                    self.assertFalse(form.is_valid())
+                    self.assertIn(field, form.errors)
+        self.login('Manager')
+        response = self.client.post(reverse('manage_sales'), self.data(starting_cash=''))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'This field is required.')
+        self.assertFalse(DailySales.objects.filter(business_date='2024-03-04').exists())
+        self.assertFalse(DailyFinancialForm(self.data(business_date='invalid')).is_valid())
+
+    def test_duplicate_requires_loading_and_authorized_edit_is_audited(self):
+        record = self.save_financial()
+        response = self.client.post(reverse('manage_sales'), self.data(register_cash='999'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Load it before editing')
+        record.refresh_from_db()
+        self.assertEqual(record.register_cash, D('850.00'))
+        self.assertEqual(DailySales.objects.filter(business_date=record.business_date).count(), 1)
+        response = self.client.post(reverse('manage_sales'), self.data(record_id=str(record.pk), register_cash='900.00'))
+        self.assertEqual(response.status_code, 302)
+        record.refresh_from_db()
+        self.assertEqual(record.cash_deposit, D('610.00'))
+        log = ActivityLog.objects.filter(object_id=str(record.pk), action='UPDATE').get()
+        self.assertEqual(log.actor, self.users['Manager'])
+        self.assertIsNotNone(log.created_at)
+        self.assertEqual(log.details['previous']['register_cash'], '850.00')
+        self.assertEqual(log.details['new']['register_cash'], '900.00')
+        self.assertEqual(log.details['previous']['cash_deposit'], '560.00')
+        self.assertEqual(log.details['new']['cash_deposit'], '610.00')
+        self.client.post(reverse('manage_sales'), self.data(record_id=str(record.pk), register_cash='900.00'))
+        self.assertEqual(ActivityLog.objects.filter(object_id=str(record.pk), action='UPDATE').count(), 1)
+
+    def test_unauthorized_posts_and_csrf(self):
+        from django.test import Client
+        for role in ('Employee', 'Owner', 'Unassigned'):
+            self.login(role)
+            self.assertEqual(self.client.post(reverse('manage_sales'), self.data()).status_code, 403)
+        self.assertFalse(DailySales.objects.filter(business_date='2024-03-04').exists())
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.users['Manager'])
+        self.assertEqual(csrf_client.post(reverse('manage_sales'), self.data()).status_code, 403)
+        self.client.logout()
+        self.assertEqual(self.client.post(reverse('manage_sales'), self.data()).status_code, 302)
+
+    def test_negative_deposit_warns_and_cannot_finalize(self):
+        record = self.save_financial(register_cash='0', daily_card_tips='0')
+        self.assertEqual(record.cash_deposit, D('-385.00'))
+        page = self.client.get(reverse('manage_sales'), {'date': record.business_date})
+        self.assertContains(page, 'Negative cash deposit: review')
+        self.client.post(reverse('closeout_status', args=[record.pk]), {'action': 'finalize'})
+        record.refresh_from_db()
+        self.assertIsNone(record.finalized_at)
+
+    def test_new_records_finalize_and_reopen_with_earnings_locks(self):
+        record = self.save_financial()
+        self.client.post(reverse('closeout_status', args=[record.pk]), {'action': 'finalize'})
+        record.refresh_from_db()
+        self.assertIsNotNone(record.finalized_at)
+        payload = self.data(record_id=str(record.pk))
+        self.assertEqual(self.client.post(reverse('manage_sales'), payload).status_code, 403)
+        self.assertEqual(self.client.post(reverse('manager_employee_earnings'), payload).status_code, 403)
+        self.client.post(reverse('closeout_status', args=[record.pk]), {'action': 'reopen'})
+        self.assertEqual(self.client.post(reverse('manage_sales'), payload).status_code, 302)
+
+    def test_reports_separate_history_and_include_all_employee_earnings(self):
+        record = self.save_financial(business_date="2024-03-06")
+        EmployeeEarning.objects.create(daily_sales=record, employee=self.earning.employee,
+                                      cash_pay=D('180'), card_tips=D('95'), cash_tips=D('12'))
+        legacy = DailySales.objects.create(business_date=date(2024, 3, 4), cash_sales=D('50'), credit_card_sales=D('20'))
+        drawer = DailySales.objects.create(business_date=date(2024, 3, 5), starting_cash=D('100'),
+                                          ending_cash=D('200'), card_batch_total=D('30'))
+        EmployeeEarning.objects.create(daily_sales=drawer, employee=self.earning.employee,
+                                      cash_pay=D('10'), card_tips=D('5'))
+        self.login('Owner')
+        for period in ('daily', 'weekly', 'monthly', 'ytd'):
+            with self.subTest(period=period):
+                response = self.client.get(reverse('reports_period', args=[period]), {'date': '2024-03-06'})
+                self.assertEqual(response.status_code, 200)
+                for key in ('register_cash', 'card_charges', 'daily_card_tips', 'daily_employee_pay',
+                            'starting_cash', 'subtotal', 'total_deposit', 'cash_deposit'):
+                    self.assertEqual(response.context['financial_summary'][key], getattr(record, key))
+                self.assertEqual(len(response.context['financial_rows']), 1)
+                self.assertContains(response, 'Historical Business Summary')
+                if period != 'daily':
+                    self.assertEqual(response.context['summary']['expected_cash_deposit'], D('150'))
+                    self.assertEqual(response.context['employee_rows'][0]['cash_pay'], D('190'))
+                    self.assertEqual(response.context['employee_rows'][0]['card_tips'], D('100'))
+                else:
+                    self.assertEqual(response.context['summary']['total_sales'], D('0'))
+        legacy.refresh_from_db(); drawer.refresh_from_db()
+        self.assertIsNone(legacy.subtotal)
+        self.assertIsNone(drawer.cash_deposit)
+        self.assertIsNone(legacy.register_cash)
+        self.assertEqual(legacy.expected_cash_deposit, D('50'))
+        self.assertEqual(drawer.expected_cash_deposit, D('100'))
+
+    def test_unique_date_and_complete_input_database_constraints(self):
+        from django.db import IntegrityError, transaction
+        record = self.save_financial()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DailySales.objects.create(business_date=record.business_date)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DailySales.objects.create(business_date=date(2024, 3, 7), register_cash=D('10'))
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DailySales.objects.create(business_date=date(2024, 3, 7), register_cash=D('-1'),
+                card_charges=D('0'), daily_card_tips=D('0'), daily_employee_pay=D('0'), starting_cash=D('0'))
+
+    def test_concurrent_duplicate_is_a_validation_error(self):
+        from unittest.mock import patch
+        from django.db import IntegrityError
+        self.login('Manager')
+        with patch.object(DailySales, 'save', side_effect=IntegrityError('duplicate')):
+            response = self.client.post(reverse('manage_sales'), self.data())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Load it before editing')
+        self.assertFalse(ActivityLog.objects.exists())
+        self.assertFalse(DailySales.objects.filter(business_date='2024-03-04').exists())
+
+    def test_failed_audit_rolls_back_financial_save(self):
+        from unittest.mock import patch
+        self.login('Manager')
+        with patch.object(ActivityLog.objects, 'create', side_effect=RuntimeError('audit unavailable')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse('manage_sales'), self.data())
+        self.assertFalse(DailySales.objects.filter(business_date='2024-03-04').exists())
+
+    def test_employee_self_entry_does_not_change_manual_totals(self):
+        self.sales.delete()
+        record = self.save_financial(business_date=str(timezone.localdate()))
+        self.login('Employee')
+        response = self.client.post(reverse('enter_today'), {
+            'earning-cash_pay': '20.00', 'earning-card_tips': '10.00', 'earning-cash_tips': '5.00',
+            'sales-cash_sales': '999', 'sales-credit_card_sales': '999'})
+        self.assertEqual(response.status_code, 302)
+        record.refresh_from_db()
+        self.assertEqual(record.cash_deposit, D('560.00'))
+        self.assertEqual(record.daily_employee_pay, D('180.00'))
+        self.assertEqual(record.daily_card_tips, D('95.00'))
+        self.assertEqual(record.employee_earnings.get().total_earnings, D('35.00'))

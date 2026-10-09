@@ -552,3 +552,37 @@ class DrawerCloseoutForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for field in ("starting_cash", "ending_cash", "card_batch_total"):
             self.fields[field].required = True
+
+
+class DailyFinancialForm(forms.ModelForm):
+    starting_cash = forms.DecimalField(label="Starting Cash", max_digits=12, decimal_places=2,
+        min_value=Decimal("0.00"), initial=Decimal("205.00"))
+    record_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
+
+    class Meta:
+        model = DailySales
+        fields = ["business_date", "register_cash", "card_charges", "daily_card_tips",
+                  "daily_employee_pay", "starting_cash"]
+        labels = {"business_date": "Date", "register_cash": "Total Cash from Register",
+                  "card_charges": "Credit Card Charges Without Fee",
+                  "daily_card_tips": "Credit Card Tips", "daily_employee_pay": "Employee Pay",
+                  "starting_cash": "Starting Cash"}
+        widgets = {"business_date": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.initial["record_id"] = self.instance.pk
+            self.fields["business_date"].disabled = True
+        for name in self.Meta.fields[1:]:
+            self.fields[name].required = True
+            self.fields[name].widget = forms.NumberInput(attrs={
+                "step": "0.01", "min": "0", "max": "9999999999.99", "inputmode": "decimal"})
+        self.fields["register_cash"].help_text = "Cash after credit card tips have been removed."
+        self.fields["daily_employee_pay"].help_text = "Manual daily total; individual earnings are recorded separately and are not added again."
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.instance.pk and cleaned.get("record_id") != self.instance.pk:
+            self.add_error(None, "A closeout already exists for this date. Load it before editing.")
+        return cleaned
