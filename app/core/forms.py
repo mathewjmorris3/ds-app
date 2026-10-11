@@ -6,6 +6,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
 from .models import DailySales, Employee, EmployeeEarning
+from .constants import STARTING_CASH
 
 
 # =========================================================
@@ -542,13 +543,56 @@ class HistoricalSalesForm(DailySalesForm):
 class DrawerCloseoutForm(forms.ModelForm):
     class Meta:
         model = DailySales
-        fields = ["business_date", "starting_cash", "ending_cash", "card_batch_total"]
-        labels = {"starting_cash": "Starting cash retained in drawer",
-                  "ending_cash": "Ending cash count AFTER payouts (including starting cash)",
+        fields = ["business_date", "ending_cash", "card_batch_total"]
+        labels = {"ending_cash": "Ending cash count AFTER payouts (including starting cash)",
                   "card_batch_total": "Card batch total INCLUDING card tips"}
         widgets = {"business_date": forms.DateInput(attrs={"type": "date"})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in ("starting_cash", "ending_cash", "card_batch_total"):
+        for field in ("ending_cash", "card_batch_total"):
             self.fields[field].required = True
+
+
+class DailyFinancialForm(forms.ModelForm):
+    shift_employee = forms.ModelChoiceField(queryset=Employee.objects.none(), label="Employee",
+        empty_label="Select Employee")
+    record_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
+
+    class Meta:
+        model = DailySales
+        fields = ["business_date", "shift", "register_cash", "card_charges", "shift_employee",
+                  "daily_employee_pay", "daily_card_tips", "daily_cash_tips", "extras"]
+        labels = {"business_date": "Date", "register_cash": "Total Cash",
+                  "card_charges": "Total Charges Without Fee",
+                  "daily_card_tips": "Credit Card Tips", "daily_employee_pay": "Employee Pay",
+                  "daily_cash_tips": "Cash Tips"}
+        widgets = {"business_date": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.initial["record_id"] = self.instance.pk
+            self.fields["business_date"].disabled = True
+        if not self.instance.pk:
+            self.instance.starting_cash = STARTING_CASH
+        self.fields["shift_employee"].queryset = Employee.objects.filter(is_active=True).select_related("user")
+        self.fields["shift_employee"].label_from_instance = lambda employee: (
+            employee.user.get_full_name().strip() or employee.user.username
+            if employee.user else employee.employee_number)
+        if self.instance.pk:
+            self.fields["shift"].disabled = True
+        for name in ("register_cash", "card_charges", "daily_employee_pay",
+                     "daily_card_tips", "daily_cash_tips", "extras"):
+            self.fields[name].required = True
+            if not self.instance.pk:
+                self.initial[name] = Decimal("0.00")
+            self.fields[name].widget = forms.NumberInput(attrs={
+                "step": "0.01", "min": "0", "max": "9999999999.99", "inputmode": "decimal"})
+
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.instance.pk and cleaned.get("record_id") != self.instance.pk:
+            self.add_error(None, "A closeout already exists for this date. Load it before editing.")
+        return cleaned

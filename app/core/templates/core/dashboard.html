@@ -6,7 +6,7 @@ Dashboard | DS Business Management
 
 
 {% block content %}
-{% if role == "Manager" or request.user.is_superuser %}<p><a href="{% url 'manage_sales' %}">Sales entry and historical corrections</a></p>{% endif %}
+{% if role == "Manager" or request.user.is_superuser %}<p><a href="{% url 'manage_sales' %}">Daily financial entry and historical corrections</a></p>{% endif %}
 
 
 <div class="page-header">
@@ -63,13 +63,13 @@ View your pay, tips and earnings history.
 
 <a
     class="dashboard-card"
-    href="{% url 'enter_today' %}"
+    href="{% url 'manage_sales' %}"
 >
 
-<h3>Today's Data</h3>
+<h3>Daily Data</h3>
 
 <p>
-Enter sales and employee earnings for today.
+Enter daily financial inputs and review calculated deposits.
 </p>
 
 </a>

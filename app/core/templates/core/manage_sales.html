@@ -1,15 +1,66 @@
 {% extends "core/base.html" %}
+{% load static money %}
+{% block title %}Daily Data | DS Business Management{% endblock %}
+{% block extra_head %}
+<style>
+.financial-layout {display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:24px}
+.financial-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;min-width:0}
+.financial-fields input, .financial-fields select {width:100%;box-sizing:border-box}
+.daily-load-form {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end;justify-items:start;min-width:0;max-width:100%}
+.daily-entry-card {min-width:0}
+.daily-date-field {width:100%}
+.deposit-result {font-size:2rem;font-weight:700;padding:20px;background:#e8f5ed;color:#173d26;border-radius:8px}
+.total-line {display:flex;justify-content:space-between;gap:20px;margin:20px 0}
+.errorlist, .deposit-warning {color:#a32020}
+@media(max-width:700px){
+    .financial-layout,.financial-fields,.daily-load-form {grid-template-columns:minmax(0,1fr)}
+    .daily-load-form {gap:12px;margin-bottom:12px}
+    #financial-entry .mobile-primary-action {margin-top:20px}
+}
+</style>
+{% endblock %}
 {% block content %}
-<h1>Sales entry and corrections</h1>
-<p>For new dates, enter the drawer count after cash pay and card-tip payouts, starting cash retained, and the card batch including tips. Enter pay and tips on the earnings screens. Legacy dates retain sales-before-tips fields. Select a date to review existing values before correcting them.</p>
-<form method="get"><label>Business date <input type="date" name="date" required></label><button type="submit">Load date</button></form>
-{% if sales.finalized_at %}<p>Finalized {{ sales.finalized_at }}. Reopen before making corrections.</p>{% else %}<form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Save sales</button></form>{% endif %}
-{% if sales %}
-<p>Expected cash deposit: ${{ sales.expected_cash_deposit|floatformat:2 }}. Card batch: ${{ sales.gross_card_batch|floatformat:2 }}.</p>
-<p>Before finalizing, confirm all employees’ pay and tips have been entered and the counts are correct.</p>
-<form method="post" action="{% url 'closeout_status' sales.pk %}">{% csrf_token %}
-{% if sales.finalized_at %}<button name="action" value="reopen">Reopen for corrections</button>
-{% else %}<button name="action" value="finalize">Finalize closeout</button>{% endif %}
+<h1>Daily Data</h1>
+<form method="get" class="daily-load-form"><div class="date-field daily-date-field"><label for="load-date">Load date for review or editing</label><input id="load-date" type="date" name="date" value="{{ request.GET.date }}" required></div><select name="shift" aria-label="Shift"><option value="DAY" {% if selected_shift == "DAY" %}selected{% endif %}>Day Shift</option><option value="NIGHT" {% if selected_shift == "NIGHT" %}selected{% endif %}>Night Shift</option></select><button type="submit" class="mobile-primary-action">Load date and shift</button></form>
+{% if not financial %}
+<p>This historical record retains its original accounting rules. New financial inputs and totals are unavailable; no historical values have been converted.</p>
+{% endif %}
+{% if sales.finalized_at %}
+<p>Finalized {{ sales.finalized_at }}. Reopen before making corrections.</p>
+{% else %}
+<form method="post" id="financial-entry" data-cash-reserve="{{ cash_reserve|stringformat:'.2f' }}">{% csrf_token %}
+{{ form.non_field_errors }}{{ form.record_id }}
+{% if financial and sales %}<input type="hidden" name="business_date" value="{{ sales.business_date|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ sales.shift }}">{% endif %}
+<div class="financial-layout">
+<section class="card daily-entry-card">
+<h2>Daily Financial Entry</h2>
+<div class="financial-fields">
+{% for field in form.visible_fields %}
+<div{% if field.name == 'business_date' %} class="date-field daily-date-field"{% endif %}><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}</div>
+{% endfor %}
+</div>
+<button type="submit" class="mobile-primary-action">{% if sales %}Save changes{% else %}Save{% endif %}</button>
+</section>
+{% if financial %}
+<section class="card" aria-live="polite">
+<h2>Daily Financial Summary</h2>
+{% for name, label in preview_fields %}
+<div class="total-line"><span>{{ label }}</span><output id="summary-{{ name }}">—</output></div>
+{% endfor %}
+<p class="help">Gross Total = cash + charges.<br>Cash Deposit = cash − employee pay − cash reserve.<br>Credit Card Deposit = charges. Tips and extras are tracked separately.</p>
+</section>
+{% endif %}
+</div>
 </form>
 {% endif %}
+{% if sales %}
+{% if financial %}
+<p>{{ sales.get_shift_display }} — {{ sales.shift_employee }}</p>
+<p>Saved totals: Gross Total {{ sales.gross_total|currency }} · Cash Deposit <strong>{{ sales.cash_deposit|currency }}</strong> · Credit Card Deposit {{ sales.credit_card_deposit|currency }}</p>
+{% else %}<p>Historical expected cash deposit: {{ sales.expected_cash_deposit|currency }}.</p>{% endif %}
+<form method="post" action="{% url 'closeout_status' sales.pk %}">{% csrf_token %}
+{% if sales.finalized_at %}<button name="action" value="reopen">Reopen for corrections</button>{% else %}<button name="action" value="finalize">Finalize closeout</button>{% endif %}
+</form>
+{% endif %}
+{% if financial %}<script src="{% static 'core/daily_financial.js' %}" defer></script>{% endif %}
 {% endblock %}

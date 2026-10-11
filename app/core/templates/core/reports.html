@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load money %}
 
 {% block title %}
 {{ report_title }} | DS Business Management
@@ -188,7 +189,7 @@ YTD
     class="inline-form"
 >
 
-<div class="form-group">
+<div class="form-group date-field">
 
 <label for="date">
 Report Date
@@ -225,13 +226,42 @@ Print
 
 
 <div class="card">
+    <h2>Daily Financial Summary</h2>
+    <p>Day and Night Shift amounts are added together for each date. Tips and extras are tracked separately from deposits. Historical records are shown below.</p>
+    <div class="grid grid-auto">
+        {% for label, amount in financial_totals %}
+        <div class="metric {% if label == 'Cash Deposit' %}metric-highlight{% endif %}">
+            <div class="metric-label">{{ label }}</div>
+            <div class="metric-value">{{ amount|currency }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="table-wrapper">
+        <table class="report-table">
+            <thead><tr>
+                <th>Date</th>
+                {% for name, label in financial_columns %}<th>{{ label }}</th>{% endfor %}
+            </tr></thead>
+            <tbody>
+                {% for row in financial_rows %}
+                <tr>
+                    <td>{{ row.business_date|date:"M j, Y" }}</td>
+                    {% for amount in row.amounts %}<td class="money">{{ amount|currency }}</td>{% endfor %}
+                </tr>
+                {% empty %}<tr><td colspan="11">No consolidated financial entries in this period.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
 
 <h2 class="card-title">
-Business Summary
+Historical Business Summary
 </h2>
 
 <p class="card-subtitle">
-Totals for the selected reporting period.
+Original accounting totals for historical records only.
 </p>
 
 
@@ -245,7 +275,7 @@ Cash Sales
 </div>
 
 <div class="metric-value">
-${{ summary.cash_sales|floatformat:2 }}
+{{ summary.cash_sales|currency }}
 </div>
 
 </div>
@@ -258,7 +288,7 @@ Credit Card Sales
 </div>
 
 <div class="metric-value">
-${{ summary.credit_card_sales|floatformat:2 }}
+{{ summary.credit_card_sales|currency }}
 </div>
 
 </div>
@@ -271,7 +301,7 @@ Total Sales
 </div>
 
 <div class="metric-value">
-${{ summary.total_sales|floatformat:2 }}
+{{ summary.total_sales|currency }}
 </div>
 
 </div>
@@ -284,7 +314,7 @@ Employee Pay
 </div>
 
 <div class="metric-value">
-${{ summary.employee_pay|floatformat:2 }}
+{{ summary.employee_pay|currency }}
 </div>
 
 </div>
@@ -297,7 +327,7 @@ Card Tips
 </div>
 
 <div class="metric-value">
-${{ summary.card_tips|floatformat:2 }}
+{{ summary.card_tips|currency }}
 </div>
 
 </div>
@@ -310,7 +340,7 @@ Cash Tips
 </div>
 
 <div class="metric-value">
-${{ summary.cash_tips|floatformat:2 }}
+{{ summary.cash_tips|currency }}
 </div>
 
 </div>
@@ -323,7 +353,7 @@ Employee Earnings
 </div>
 
 <div class="metric-value">
-${{ summary.employee_earnings|floatformat:2 }}
+{{ summary.employee_earnings|currency }}
 </div>
 
 </div>
@@ -336,7 +366,7 @@ Expected Cash Deposit
 </div>
 
 <div class="metric-value">
-${{ summary.expected_cash_deposit|floatformat:2 }}
+{{ summary.expected_cash_deposit|currency }}
 </div>
 
 </div>
@@ -349,7 +379,7 @@ Gross Card Batch
 </div>
 
 <div class="metric-value">
-${{ summary.gross_card_batch|floatformat:2 }}
+{{ summary.gross_card_batch|currency }}
 </div>
 
 </div>
@@ -362,7 +392,7 @@ Net Business Proceeds
 </div>
 
 <div class="metric-value">
-${{ summary.net_daily_proceeds|floatformat:2 }}
+{{ summary.net_daily_proceeds|currency }}
 </div>
 
 </div>
@@ -377,7 +407,7 @@ ${{ summary.net_daily_proceeds|floatformat:2 }}
 <div class="card">
 
 <h2 class="card-title">
-Daily Breakdown
+Historical Daily Breakdown
 </h2>
 
 
@@ -418,40 +448,40 @@ Daily Breakdown
 </td>
 
 <td class="money">
-${{ row.cash_sales|floatformat:2 }}
+{{ row.cash_sales|currency }}
 </td>
 
 <td class="money">
-${{ row.credit_card_sales|floatformat:2 }}
+{{ row.credit_card_sales|currency }}
 </td>
 
 <td class="money">
-${{ row.total_sales|floatformat:2 }}
+{{ row.total_sales|currency }}
 </td>
 
 <td class="money">
-${{ row.employee_pay|floatformat:2 }}
+{{ row.employee_pay|currency }}
 </td>
 
 <td class="money">
-${{ row.card_tips|floatformat:2 }}
+{{ row.card_tips|currency }}
 </td>
 
 <td class="money">
-${{ row.cash_tips|floatformat:2 }}
+{{ row.cash_tips|currency }}
 </td>
 
 <td class="money">
-${{ row.expected_cash_deposit|floatformat:2 }}
+{{ row.expected_cash_deposit|currency }}
 </td>
 
 <td class="money">
-${{ row.gross_card_batch|floatformat:2 }}
+{{ row.gross_card_batch|currency }}
 </td>
 
 <td class="money">
 <strong>
-${{ row.net_daily_proceeds|floatformat:2 }}
+{{ row.net_daily_proceeds|currency }}
 </strong>
 </td>
 
@@ -521,20 +551,20 @@ Employee Earnings
 </td>
 
 <td class="money">
-${{ employee.cash_pay|floatformat:2 }}
+{{ employee.cash_pay|currency }}
 </td>
 
 <td class="money">
-${{ employee.card_tips|floatformat:2 }}
+{{ employee.card_tips|currency }}
 </td>
 
 <td class="money">
-${{ employee.cash_tips|floatformat:2 }}
+{{ employee.cash_tips|currency }}
 </td>
 
 <td class="money">
 <strong>
-${{ employee.total_earnings|floatformat:2 }}
+{{ employee.total_earnings|currency }}
 </strong>
 </td>
 
