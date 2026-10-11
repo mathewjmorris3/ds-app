@@ -181,7 +181,9 @@ class DailyFinancialTests(TestCase):
     login = BusinessTests.login
 
     def data(self, **changes):
-        values = {'business_date': '2024-03-04', 'register_cash': '850.00',
+        values = {'business_date': '2024-03-04', 'shift': 'DAY',
+                  'shift_employee': str(self.earning.employee_id), 'daily_cash_tips': '12.00',
+                  'extras': '7.00', 'register_cash': '850.00',
                   'card_charges': '620.00', 'daily_card_tips': '95.00',
                   'daily_employee_pay': '180.00', 'starting_cash': '205.00'}
         values.update(changes)
@@ -191,24 +193,23 @@ class DailyFinancialTests(TestCase):
         self.login('Manager')
         response = self.client.post(reverse('manage_sales'), self.data(**changes))
         self.assertEqual(response.status_code, 302)
-        return DailySales.objects.get(business_date=self.data(**changes)['business_date'])
+        return DailySales.objects.get(business_date=self.data(**changes)['business_date'], shift=self.data(**changes)['shift'])
 
     def test_example_persistence_and_independent_earnings(self):
         record = self.save_financial(subtotal='1', total_deposit='2', cash_deposit='3')
-        for field, value in {'subtotal': '1470.00', 'total_deposit': '1565.00', 'cash_deposit': '560.00',
+        for field, value in {'subtotal': '1470.00', 'total_deposit': '1470.00', 'cash_deposit': '465.00',
                              'starting_cash': '205.00', 'register_cash': '850.00', 'card_charges': '620.00',
                              'daily_card_tips': '95.00', 'daily_employee_pay': '180.00'}.items():
             self.assertEqual(getattr(record, field), D(value))
-        self.assertFalse(record.employee_earnings.exists())
-        EmployeeEarning.objects.create(daily_sales=record, employee=self.earning.employee,
-                                      cash_pay=D('180'), card_tips=D('95'), cash_tips=D('12'))
-        self.assertEqual(record.cash_deposit, D('560.00'))
+        self.assertEqual(record.employee_earnings.count(), 1)
+        self.assertEqual(record.shift_employee, self.earning.employee)
+        self.assertEqual(record.cash_deposit, D('465.00'))
         self.assertEqual(record.total_employee_earnings, D('287.00'))
         self.assertEqual(EmployeeEarning.objects.get(pk=self.earning.pk).cash_pay, D('20.10'))
         self.assertEqual(record.expected_cash_deposit, record.cash_deposit)
         page = self.client.get(reverse('manage_sales'), {'date': record.business_date})
         self.assertContains(page, 'Daily data saved.')
-        self.assertContains(page, 'Calculated Totals')
+        self.assertContains(page, 'Daily Financial Summary')
         self.assertContains(page, 'daily_financial.js')
         self.assertContains(page, 'type="hidden" name="business_date" value="2024-03-04"')
 
@@ -217,30 +218,31 @@ class DailyFinancialTests(TestCase):
         self.sales.delete()
         page = self.client.get(reverse('manage_sales'))
         self.assertEqual(page.context['form']['business_date'].value(), timezone.localdate())
-        self.assertEqual(page.context['form']['starting_cash'].value(), D('205.00'))
+        self.assertEqual(page.context['form'].instance.starting_cash, D('205.00'))
 
     def test_zero_and_exact_cents(self):
         record = self.save_financial(register_cash='0', card_charges='0', daily_card_tips='0',
                                      daily_employee_pay='0', starting_cash='0')
-        for field in ('subtotal', 'total_deposit', 'cash_deposit'):
+        for field in ('subtotal', 'total_deposit'):
             self.assertEqual(getattr(record, field), D('0.00'))
+        self.assertEqual(record.cash_deposit, D('-205.00'))
         record = self.save_financial(business_date='2024-03-05', register_cash='0.10',
                                     card_charges='0.20', daily_card_tips='0.03',
                                     daily_employee_pay='0.01', starting_cash='0.02')
         self.assertEqual(record.subtotal, D('0.30'))
-        self.assertEqual(record.total_deposit, D('0.33'))
-        self.assertEqual(record.cash_deposit, D('0.10'))
+        self.assertEqual(record.total_deposit, D('0.30'))
+        self.assertEqual(record.cash_deposit, D('-204.91'))
 
     def test_invalid_and_missing_inputs_are_not_rounded_or_defaulted(self):
         from .forms import DailyFinancialForm
-        for field in ('register_cash', 'card_charges', 'daily_card_tips', 'daily_employee_pay', 'starting_cash'):
+        for field in ('register_cash', 'card_charges', 'daily_card_tips', 'daily_employee_pay', 'daily_cash_tips', 'extras'):
             for invalid in ('', '-0.01', 'abc', 'NaN', 'Infinity', '0.001', '10000000000.00'):
                 with self.subTest(field=field, value=invalid):
                     form = DailyFinancialForm(self.data(**{field: invalid}))
                     self.assertFalse(form.is_valid())
                     self.assertIn(field, form.errors)
         self.login('Manager')
-        response = self.client.post(reverse('manage_sales'), self.data(starting_cash=''))
+        response = self.client.post(reverse('manage_sales'), self.data(register_cash=''))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'This field is required.')
         self.assertFalse(DailySales.objects.filter(business_date='2024-03-04').exists())
@@ -257,14 +259,14 @@ class DailyFinancialTests(TestCase):
         response = self.client.post(reverse('manage_sales'), self.data(record_id=str(record.pk), register_cash='900.00'))
         self.assertEqual(response.status_code, 302)
         record.refresh_from_db()
-        self.assertEqual(record.cash_deposit, D('610.00'))
+        self.assertEqual(record.cash_deposit, D('515.00'))
         log = ActivityLog.objects.filter(object_id=str(record.pk), action='UPDATE').get()
         self.assertEqual(log.actor, self.users['Manager'])
         self.assertIsNotNone(log.created_at)
         self.assertEqual(log.details['previous']['register_cash'], '850.00')
         self.assertEqual(log.details['new']['register_cash'], '900.00')
-        self.assertEqual(log.details['previous']['cash_deposit'], '560.00')
-        self.assertEqual(log.details['new']['cash_deposit'], '610.00')
+        self.assertEqual(log.details['previous']['cash_deposit'], '465.00')
+        self.assertEqual(log.details['new']['cash_deposit'], '515.00')
         self.client.post(reverse('manage_sales'), self.data(record_id=str(record.pk), register_cash='900.00'))
         self.assertEqual(ActivityLog.objects.filter(object_id=str(record.pk), action='UPDATE').count(), 1)
 
@@ -280,14 +282,14 @@ class DailyFinancialTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.post(reverse('manage_sales'), self.data()).status_code, 302)
 
-    def test_negative_deposit_warns_and_cannot_finalize(self):
+    def test_negative_deposit_displays_and_can_finalize(self):
         record = self.save_financial(register_cash='0', daily_card_tips='0')
         self.assertEqual(record.cash_deposit, D('-385.00'))
         page = self.client.get(reverse('manage_sales'), {'date': record.business_date})
-        self.assertContains(page, 'Negative cash deposit: review')
+        self.assertContains(page, '-$385.00')
         self.client.post(reverse('closeout_status', args=[record.pk]), {'action': 'finalize'})
         record.refresh_from_db()
-        self.assertIsNone(record.finalized_at)
+        self.assertIsNotNone(record.finalized_at)
 
     def test_new_records_finalize_and_reopen_with_earnings_locks(self):
         record = self.save_financial()
@@ -302,8 +304,6 @@ class DailyFinancialTests(TestCase):
 
     def test_reports_separate_history_and_include_all_employee_earnings(self):
         record = self.save_financial(business_date="2024-03-06")
-        EmployeeEarning.objects.create(daily_sales=record, employee=self.earning.employee,
-                                      cash_pay=D('180'), card_tips=D('95'), cash_tips=D('12'))
         legacy = DailySales.objects.create(business_date=date(2024, 3, 4), cash_sales=D('50'), credit_card_sales=D('20'))
         drawer = DailySales.objects.create(business_date=date(2024, 3, 5), starting_cash=D('100'),
                                           ending_cash=D('200'), card_batch_total=D('30'))
@@ -315,7 +315,7 @@ class DailyFinancialTests(TestCase):
                 response = self.client.get(reverse('reports_period', args=[period]), {'date': '2024-03-06'})
                 self.assertEqual(response.status_code, 200)
                 for key in ('register_cash', 'card_charges', 'daily_card_tips', 'daily_employee_pay',
-                            'starting_cash', 'subtotal', 'total_deposit', 'cash_deposit'):
+                            'gross_total', 'credit_card_deposit', 'daily_cash_tips', 'extras', 'cash_deposit'):
                     self.assertEqual(response.context['financial_summary'][key], getattr(record, key))
                 self.assertEqual(len(response.context['financial_rows']), 1)
                 self.assertContains(response, 'Historical Business Summary')
@@ -362,16 +362,142 @@ class DailyFinancialTests(TestCase):
                 self.client.post(reverse('manage_sales'), self.data())
         self.assertFalse(DailySales.objects.filter(business_date='2024-03-04').exists())
 
-    def test_employee_self_entry_does_not_change_manual_totals(self):
+    def test_employee_self_entry_cannot_change_shift_earnings(self):
         self.sales.delete()
         record = self.save_financial(business_date=str(timezone.localdate()))
         self.login('Employee')
         response = self.client.post(reverse('enter_today'), {
             'earning-cash_pay': '20.00', 'earning-card_tips': '10.00', 'earning-cash_tips': '5.00',
             'sales-cash_sales': '999', 'sales-credit_card_sales': '999'})
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 403)
         record.refresh_from_db()
-        self.assertEqual(record.cash_deposit, D('560.00'))
+        self.assertEqual(record.cash_deposit, D('465.00'))
         self.assertEqual(record.daily_employee_pay, D('180.00'))
         self.assertEqual(record.daily_card_tips, D('95.00'))
-        self.assertEqual(record.employee_earnings.get().total_earnings, D('35.00'))
+        self.assertEqual(record.employee_earnings.get().total_earnings, D('287.00'))
+
+    def test_two_shifts_two_employees_and_all_report_periods(self):
+        day = self.save_financial(register_cash='1200', card_charges='800', daily_employee_pay='150')
+        night = self.save_financial(shift='NIGHT', shift_employee=str(self.users['Manager'].employee_profile.pk),
+            register_cash='300', card_charges='200', daily_employee_pay='150', daily_card_tips='20',
+            daily_cash_tips='5', extras='3')
+        self.assertEqual(day.gross_total, D('2000'))
+        self.assertEqual(day.cash_deposit, D('845'))
+        self.assertEqual(night.cash_deposit, D('-55'))
+        self.assertEqual(DailySales.objects.filter(business_date=day.business_date).count(), 2)
+        self.assertEqual(night.employee_earnings.get().employee, self.users['Manager'].employee_profile)
+        self.login('Owner')
+        for period in ('daily', 'weekly', 'monthly', 'ytd'):
+            response = self.client.get(reverse('reports_period', args=[period]), {'date': '2024-03-04'})
+            totals = response.context['financial_summary']
+            self.assertEqual(totals['gross_total'], D('2500'))
+            self.assertEqual(totals['cash_deposit'], D('790'))
+            self.assertEqual(totals['credit_card_deposit'], D('1000'))
+            self.assertEqual(totals['daily_employee_pay'], D('300'))
+            self.assertEqual(totals['daily_card_tips'], D('115'))
+            self.assertEqual(totals['daily_cash_tips'], D('17'))
+            self.assertEqual(totals['extras'], D('10'))
+            self.assertEqual(len(response.context['financial_rows']), 1)
+            self.assertEqual(len(response.context['employee_rows']), 2)
+        self.login('Employee')
+        response = self.client.get(reverse('employee_earnings_report_period', args=['monthly']), {'date': '2024-03-04'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Manager</td>')
+
+    def test_update_and_reassign_employee_preserves_single_earning(self):
+        record = self.save_financial()
+        earning_id = record.employee_earnings.get().pk
+        self.client.post(reverse('manage_sales'), self.data(record_id=record.pk,
+            shift_employee=self.users['Manager'].employee_profile.pk, daily_employee_pay='150',
+            daily_card_tips='20', daily_cash_tips='9', starting_cash='100', extras='11'))
+        record.refresh_from_db()
+        self.assertEqual(record.employee_earnings.count(), 1)
+        earning = record.employee_earnings.get()
+        self.assertEqual(earning.pk, earning_id)
+        self.assertEqual(earning.employee, self.users['Manager'].employee_profile)
+        self.assertEqual(earning.cash_pay, D('150'))
+        self.assertEqual(earning.card_tips, D('20'))
+        self.assertEqual(earning.cash_tips, D('9'))
+        self.assertEqual(record.cash_deposit, D('495'))
+        page = self.client.get(reverse('manage_sales'), {'date': record.business_date, 'shift': 'DAY'})
+        self.assertEqual(record.starting_cash, D('205'))
+        self.assertEqual(page.context['form']['extras'].value(), D('11'))
+
+    def test_shift_lock_does_not_lock_other_shift(self):
+        day = self.save_financial()
+        self.client.post(reverse('closeout_status', args=[day.pk]), {'action': 'finalize'})
+        night = self.save_financial(shift='NIGHT')
+        self.assertEqual(self.client.post(reverse('manage_sales'), self.data(record_id=day.pk)).status_code, 403)
+        self.assertEqual(self.client.post(reverse('manage_sales'), self.data(shift='NIGHT', record_id=night.pk, register_cash='901')).status_code, 302)
+        self.assertEqual(self.client.post(reverse('manage_sales'), self.data(shift='NIGHT')).status_code, 200)
+        night.refresh_from_db()
+        self.assertEqual(night.register_cash, D('901'))
+
+    def test_employee_and_shift_validation(self):
+        from .forms import DailyFinancialForm
+        for field, invalid in [('shift', ''), ('shift', 'AFTERNOON'), ('shift_employee', ''), ('shift_employee', '999999')]:
+            self.assertFalse(DailyFinancialForm(self.data(**{field: invalid})).is_valid())
+        employee = self.earning.employee
+        employee.is_active = False
+        employee.save()
+        self.assertFalse(DailyFinancialForm(self.data()).is_valid())
+
+    def test_money_defaults_and_negative_report_currency(self):
+        from .forms import DailyFinancialForm
+        from .templatetags.money import currency
+        form = DailyFinancialForm()
+        for field in ('register_cash', 'card_charges', 'daily_employee_pay', 'daily_card_tips', 'daily_cash_tips', 'extras'):
+            self.assertEqual(form[field].value(), D('0.00'))
+        self.assertNotIn('starting_cash', form.fields)
+        self.assertEqual(currency(D('-55')), '-$55.00')
+        self.save_financial(register_cash='300', daily_employee_pay='150')
+        report = self.client.get(reverse('reports_period', args=['daily']), {'date': '2024-03-04'})
+        self.assertContains(report, '-$55.00')
+
+    def test_fixed_reserve_cannot_be_changed_by_submitted_inputs(self):
+        record = self.save_financial(starting_cash='0', uses_fixed_cash_reserve='false')
+        self.assertTrue(record.uses_fixed_cash_reserve)
+        self.assertEqual(record.starting_cash, D('205'))
+        self.assertEqual(record.cash_deposit, D('465'))
+        self.client.post(reverse('manage_sales'), self.data(record_id=record.pk,
+            starting_cash='999', uses_fixed_cash_reserve='false'))
+        record.refresh_from_db()
+        self.assertEqual(record.starting_cash, D('205'))
+        self.assertTrue(record.uses_fixed_cash_reserve)
+        self.assertEqual(record.cash_deposit, D('465'))
+        page = self.client.get(reverse('manage_sales'), {'date': record.business_date})
+        self.assertNotContains(page, 'name="starting_cash"')
+        self.assertNotContains(page, 'Starting Cash')
+        self.assertContains(page, 'data-cash-reserve="205.00"')
+
+    def test_reserve_is_not_a_report_column_or_total(self):
+        self.save_financial()
+        self.save_financial(shift='NIGHT')
+        for period in ('daily', 'weekly', 'monthly', 'ytd'):
+            report = self.client.get(reverse('reports_period', args=[period]), {'date': '2024-03-04'})
+            self.assertNotIn('starting_cash', report.context['financial_summary'])
+            self.assertNotIn('starting_cash', dict(report.context['financial_columns']))
+            self.assertNotContains(report, 'Starting Cash')
+            self.assertEqual(report.context['financial_summary']['cash_deposit'], D('930'))
+
+    def test_historical_reserve_calculation_and_earnings_are_preserved(self):
+        record = DailySales.objects.create(business_date='2024-03-04', uses_fixed_cash_reserve=False,
+            register_cash=D('850'), card_charges=D('620'), daily_employee_pay=D('180'),
+            daily_card_tips=D('95'), daily_cash_tips=D('12'), starting_cash=D('100'),
+            shift_employee=self.earning.employee)
+        earning = EmployeeEarning.objects.create(daily_sales=record, employee=self.earning.employee,
+            cash_pay=D('180'), card_tips=D('95'), cash_tips=D('12'))
+        self.assertEqual(record.cash_deposit, D('570'))
+        self.login('Manager')
+        page = self.client.get(reverse('manage_sales'), {'date': record.business_date})
+        self.assertContains(page, 'data-cash-reserve="100.00"')
+        self.assertNotContains(page, 'name="starting_cash"')
+        response = self.client.post(reverse('manage_sales'), self.data(record_id=record.pk, starting_cash='0'))
+        self.assertEqual(response.status_code, 302, response.context["form"].errors if response.status_code == 200 else "")
+        record.refresh_from_db()
+        earning.refresh_from_db()
+        self.assertFalse(record.uses_fixed_cash_reserve)
+        self.assertEqual(record.starting_cash, D('100'))
+        self.assertEqual(record.cash_deposit, D('570'))
+        self.assertEqual(earning.total_earnings, D('287'))
+        self.assertEqual(record.employee_earnings.count(), 1)

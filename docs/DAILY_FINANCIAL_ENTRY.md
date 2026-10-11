@@ -1,5 +1,7 @@
 # Daily financial entry redesign
 
+For the current shift entry and financial formulas, see [SHIFT_FINANCIAL_ENTRY.md](SHIFT_FINANCIAL_ENTRY.md). The consolidated-entry rules below describe the previous implementation.
+
 Implemented in the workspace development branch `dev/daily-financial-entry`.
 No running service, deployment environment, secret file, or application database
 was modified. The source models/views at `/opt/ds-app/source/app` matched the

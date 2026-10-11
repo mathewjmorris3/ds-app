@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load money %}
 
 {% block title %}
 Employee Earnings Report
@@ -71,7 +72,7 @@ Custom
     class="inline-form"
 >
 
-<div class="form-group">
+<div class="form-group date-field">
 
 <label>
 Start Date
@@ -86,7 +87,7 @@ Start Date
 </div>
 
 
-<div class="form-group">
+<div class="form-group date-field">
 
 <label>
 End Date
@@ -118,7 +119,7 @@ View
     class="inline-form"
 >
 
-<div class="form-group">
+<div class="form-group date-field">
 
 <label>
 Report Date
@@ -174,7 +175,7 @@ Cash Pay
 </div>
 
 <div class="metric-value">
-${{ cash_pay|floatformat:2 }}
+{{ cash_pay|currency }}
 </div>
 
 </div>
@@ -187,7 +188,7 @@ Credit Card Tips
 </div>
 
 <div class="metric-value">
-${{ card_tips|floatformat:2 }}
+{{ card_tips|currency }}
 </div>
 
 </div>
@@ -200,7 +201,7 @@ Cash Tips
 </div>
 
 <div class="metric-value">
-${{ cash_tips|floatformat:2 }}
+{{ cash_tips|currency }}
 </div>
 
 </div>
@@ -213,7 +214,7 @@ Total Tips
 </div>
 
 <div class="metric-value">
-${{ total_tips|floatformat:2 }}
+{{ total_tips|currency }}
 </div>
 
 </div>
@@ -226,7 +227,7 @@ Total Earnings
 </div>
 
 <div class="metric-value">
-${{ total_earnings|floatformat:2 }}
+{{ total_earnings|currency }}
 </div>
 
 </div>
@@ -260,6 +261,7 @@ Earnings Detail
 <tr>
 
 <th>Date</th>
+<th>Shift</th>
 <th class="money">Cash Pay</th>
 <th class="money">Card Tips</th>
 <th class="money">Cash Tips</th>
@@ -280,26 +282,27 @@ Earnings Detail
 <td>
 {{ row.business_date|date:"M j, Y" }}
 </td>
+<td>{{ row.shift }}</td>
 
 <td class="money">
-${{ row.cash_pay|floatformat:2 }}
+{{ row.cash_pay|currency }}
 </td>
 
 <td class="money">
-${{ row.card_tips|floatformat:2 }}
+{{ row.card_tips|currency }}
 </td>
 
 <td class="money">
-${{ row.cash_tips|floatformat:2 }}
+{{ row.cash_tips|currency }}
 </td>
 
 <td class="money">
-${{ row.total_tips|floatformat:2 }}
+{{ row.total_tips|currency }}
 </td>
 
 <td class="money">
 <strong>
-${{ row.total_earnings|floatformat:2 }}
+{{ row.total_earnings|currency }}
 </strong>
 </td>
 

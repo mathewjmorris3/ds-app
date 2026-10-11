@@ -5,6 +5,7 @@ import calendar
 import json
 from functools import wraps
 
+from django.core.exceptions import ValidationError
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
@@ -15,6 +16,7 @@ from django.urls import reverse
 from django.contrib.auth.models import Group
 from .forms import (DailySalesForm, EmployeeEarningForm, EmployeeCreateForm, ManagerEmployeeEarningForm, ManagerOtherEmployeeEarningsForm)
 from .models import ActivityLog, DailySales, EmployeeEarning, Employee
+from .constants import STARTING_CASH
 from django.core.paginator import Paginator
 
 
@@ -31,7 +33,14 @@ def editable_business_date(view):
         except ValueError:
             day = None
         with transaction.atomic():
-            sales = DailySales.objects.select_for_update().filter(business_date=day).first()
+            records = DailySales.objects.select_for_update().filter(business_date=day)
+            if view.__name__ == "manage_sales":
+                records = records.filter(shift=request.POST.get("shift", "DAY"))
+            else:
+                records = records.filter(shift="DAY")
+                if records.filter(register_cash__isnull=False).exists():
+                    return HttpResponseForbidden("Edit shift pay and tips through Daily Data.")
+            sales = records.first()
             if sales and sales.finalized_at:
                 return HttpResponseForbidden("This closeout is finalized. A manager must reopen it before any changes.")
             return view(request, *args, **kwargs)
@@ -99,7 +108,7 @@ def enter_today(request):
     business_date = timezone.localdate()
 
     daily_sales = DailySales.objects.filter(
-        business_date=business_date
+        business_date=business_date, shift="DAY"
     ).first()
 
     earning = (
@@ -238,7 +247,7 @@ def enter_today(request):
 
                 else:
                     daily_sales = DailySales.objects.get(
-                        business_date=business_date
+                        business_date=business_date, shift="DAY"
                     )
 
                 if not earnings_locked:
@@ -483,14 +492,16 @@ def reports(request, period="weekly"):
     }
 
     financial_rows = []
+    financial_rows_by_date = {}
     financial_columns = (
         ("register_cash", "Total Cash from Register"),
         ("card_charges", "Credit Card Charges Without Fee"),
         ("daily_card_tips", "Credit Card Tips"),
         ("daily_employee_pay", "Employee Pay"),
-        ("starting_cash", "Starting Cash"),
-        ("subtotal", "Subtotal"),
-        ("total_deposit", "Total Deposit"),
+        ("gross_total", "Gross Total"),
+        ("credit_card_deposit", "Credit Card Deposit"),
+        ("daily_cash_tips", "Cash Tips"),
+        ("extras", "Extras"),
         ("cash_deposit", "Cash Deposit"),
     )
     financial_fields = tuple(name for name, label in financial_columns)
@@ -532,7 +543,14 @@ def reports(request, period="weekly"):
             row = {name: getattr(sales, name) for name in financial_fields}
             row["business_date"] = sales.business_date
             row["amounts"] = [row[name] for name in financial_fields]
-            financial_rows.append(row)
+            existing_row = financial_rows_by_date.get(sales.business_date)
+            if existing_row:
+                for name in financial_fields:
+                    existing_row[name] += row[name]
+                existing_row["amounts"] = [existing_row[name] for name in financial_fields]
+            else:
+                financial_rows.append(row)
+                financial_rows_by_date[sales.business_date] = row
             for name in financial_fields:
                 financial_summary[name] += row[name]
         else:
@@ -910,6 +928,8 @@ def employee_earnings_report(request, period="monthly"):
             "business_date":
                 entry.daily_sales.business_date,
 
+            "shift": entry.daily_sales.get_shift_display(),
+
             "cash_pay":
                 entry.cash_pay,
 
@@ -960,7 +980,7 @@ def employee_earnings_report(request, period="monthly"):
             "total_tips": total_tips,
             "total_earnings": total_earnings,
 
-            "days_recorded": len(rows),
+            "days_recorded": len({row["business_date"] for row in rows}),
             "rows": rows,
 
             "generated_at": timezone.localtime(),
@@ -1526,7 +1546,7 @@ def manager_employee_earnings(request):
 
             try:
                 daily_sales = DailySales.objects.get(
-                    business_date=business_date
+                    business_date=business_date, shift="DAY"
                 )
 
             except DailySales.DoesNotExist:
@@ -1690,7 +1710,7 @@ def manager_add_employee_earnings(request):
 
     try:
         daily_sales = DailySales.objects.get(
-            business_date=business_date
+            business_date=business_date, shift="DAY"
         )
 
     except DailySales.DoesNotExist:
@@ -2003,11 +2023,12 @@ def manage_sales(request):
         selected = date.fromisoformat(selected) if selected else timezone.localdate()
     except ValueError:
         selected = None
-    sales = (DailySales.objects.select_for_update().filter(business_date=selected).first()
+    shift = request.POST.get("shift", "DAY") if request.method == "POST" else request.GET.get("shift", "DAY")
+    sales = (DailySales.objects.select_for_update().filter(business_date=selected, shift=shift).first()
              if selected else None)
     financial = sales is None or sales.is_financial_entry
     fields = (["business_date", "register_cash", "card_charges", "daily_card_tips",
-               "daily_employee_pay", "starting_cash"] if financial else
+               "daily_employee_pay", "starting_cash", "shift", "shift_employee_id", "daily_cash_tips", "extras"] if financial else
               ["starting_cash", "ending_cash", "card_batch_total"] if sales.is_drawer_closeout else
               ["cash_sales", "credit_card_sales"])
     def snapshot(record):
@@ -2017,9 +2038,10 @@ def manage_sales(request):
                            ("subtotal", "total_deposit", "cash_deposit")})
         return values
     previous = snapshot(sales) if sales else None
+    prior_employee_id = sales.shift_employee_id if sales else None
     form_class = DailyFinancialForm if financial else DrawerCloseoutForm if sales.is_drawer_closeout else HistoricalSalesForm
     form = form_class(request.POST if request.method == "POST" else None,
-                      instance=sales, initial={"business_date": selected})
+                      instance=sales, initial={"business_date": selected, "shift": shift})
     if request.method == "POST" and form.is_valid():
         record = form.save(commit=False)
         if sales:
@@ -2029,8 +2051,23 @@ def manage_sales(request):
         try:
             with transaction.atomic():
                 record.save()
+                if financial:
+                    earning = record.employee_earnings.filter(employee_id=prior_employee_id).first() if prior_employee_id else None
+                    if earning is None:
+                        earning = record.employee_earnings.filter(employee=record.shift_employee).first()
+                    if earning is None:
+                        earning = EmployeeEarning(daily_sales=record, entered_by=request.user)
+                    earning.employee = record.shift_employee
+                    earning.cash_pay = record.daily_employee_pay
+                    earning.card_tips = record.daily_card_tips
+                    earning.cash_tips = record.daily_cash_tips
+                    earning.last_modified_by = request.user
+                    earning.full_clean(exclude=["entered_by"])
+                    earning.save()
         except IntegrityError:
             form.add_error(None, "A closeout already exists for this date. Load it before editing.")
+        except ValidationError:
+            form.add_error(None, "This employee has an existing earnings entry for this shift. Reconcile it before changing the employee.")
         else:
             new = snapshot(record)
             if previous != new:
@@ -2040,10 +2077,15 @@ def manage_sales(request):
                     description=f"Daily data saved for {record.business_date}.",
                     details={"previous": previous, "new": new})
             messages.success(request, "Daily data saved.")
-            if record.is_financial_entry and record.cash_deposit < 0:
-                messages.warning(request, "Negative cash deposit: review the financial inputs before finalizing.")
-            return redirect(f"{reverse('manage_sales')}?date={record.business_date}")
-    return render(request, "core/manage_sales.html", {"form": form, "sales": sales, "financial": financial})
+            return redirect(f"{reverse('manage_sales')}?date={record.business_date}&shift={record.shift}")
+    return render(request, "core/manage_sales.html", {"form": form, "sales": sales, "financial": financial,
+        "selected_shift": shift,
+        "cash_reserve": (sales.starting_cash if sales and sales.is_financial_entry
+                         and not sales.uses_fixed_cash_reserve else STARTING_CASH),
+        "preview_fields": [("gross_total", "Gross Total"), ("daily_employee_pay", "Employee Pay"),
+                           ("cash_deposit", "Cash Deposit"),
+                           ("credit_card_deposit", "Credit Card Deposit"), ("daily_card_tips", "Credit Card Tips"),
+                           ("daily_cash_tips", "Cash Tips"), ("extras", "Extras")]})
 
 
 
@@ -2062,10 +2104,7 @@ def closeout_status(request, sales_id):
     if action == "finalize" and not sales.finalized_at:
         if sales.is_drawer_closeout and sales.total_card_tips > sales.card_batch_total:
             messages.error(request, "Card tips exceed the card batch. Correct the entries before finalizing.")
-            return redirect(f"{reverse('manage_sales')}?date={sales.business_date}")
-        if sales.is_financial_entry and sales.cash_deposit < 0:
-            messages.error(request, "Negative cash deposit requires correction before finalizing.")
-            return redirect(f"{reverse('manage_sales')}?date={sales.business_date}")
+            return redirect(f"{reverse('manage_sales')}?date={sales.business_date}&shift={sales.shift}")
         sales.finalized_at = timezone.now()
     elif action == "reopen" and sales.finalized_at:
         sales.finalized_at = None
@@ -2075,6 +2114,6 @@ def closeout_status(request, sales_id):
     ActivityLog.objects.create(actor=request.user, action=ActivityLog.Action.UPDATE,
         object_type="DailySales", object_id=str(sales.pk),
         description=f"Closeout {action} for {sales.business_date}.",
-        details={"transition": action, "business_date": str(sales.business_date)})
+        details={"transition": action, "business_date": str(sales.business_date), "shift": sales.shift})
     messages.success(request, "Closeout finalized." if action == "finalize" else "Closeout reopened.")
     return redirect("manage_sales")

@@ -6,6 +6,8 @@ from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
 
+from .constants import STARTING_CASH
+
 
 class Employee(models.Model):
 
@@ -67,9 +69,22 @@ class Employee(models.Model):
 
 
 class DailySales(models.Model):
+    class Shift(models.TextChoices):
+        DAY = "DAY", "Day Shift"
+        NIGHT = "NIGHT", "Night Shift"
+
+    uses_fixed_cash_reserve = models.BooleanField(default=True)
+
+    shift = models.CharField(max_length=5, choices=Shift.choices, default=Shift.DAY)
+    shift_employee = models.ForeignKey(Employee, on_delete=models.PROTECT,
+        null=True, blank=True, related_name="shift_sales")
+    daily_cash_tips = models.DecimalField(max_digits=12, decimal_places=2,
+        default=Decimal("0.00"), validators=[MinValueValidator(Decimal("0.00"))])
+    extras = models.DecimalField(max_digits=12, decimal_places=2,
+        default=Decimal("0.00"), validators=[MinValueValidator(Decimal("0.00"))])
+
 
     business_date = models.DateField(
-        unique=True,
         default=timezone.localdate,
     )
 
@@ -113,6 +128,9 @@ class DailySales(models.Model):
     class Meta:
         ordering = ["-business_date"]
         constraints = [
+            models.UniqueConstraint(fields=["business_date", "shift"], name="unique_date_shift"),
+            models.CheckConstraint(condition=models.Q(shift__in=["DAY", "NIGHT"]), name="valid_daily_shift"),
+            models.CheckConstraint(condition=models.Q(daily_cash_tips__gte=0, extras__gte=0), name="nonnegative_tips_extras"),
             models.CheckConstraint(
                 condition=(
                     models.Q(register_cash__isnull=True, card_charges__isnull=True,
@@ -160,13 +178,22 @@ class DailySales(models.Model):
 
     @property
     def total_deposit(self):
-        return self.subtotal + self.daily_card_tips if self.is_financial_entry else None
+        return self.subtotal if self.is_financial_entry else None
 
     @property
     def cash_deposit(self):
         if self.is_financial_entry:
-            return self.total_deposit - self.daily_employee_pay - self.starting_cash - self.card_charges
+            reserve = STARTING_CASH if self.uses_fixed_cash_reserve else self.starting_cash
+            return self.register_cash - self.daily_employee_pay - reserve
         return None
+
+    @property
+    def gross_total(self):
+        return self.subtotal
+
+    @property
+    def credit_card_deposit(self):
+        return self.card_charges if self.is_financial_entry else None
 
     @property
     def is_drawer_closeout(self):
@@ -233,7 +260,7 @@ class DailySales(models.Model):
     @property
     def gross_card_batch(self):
         if self.is_financial_entry:
-            return self.card_charges + self.daily_card_tips
+            return self.credit_card_deposit
         return self.card_batch_total if self.is_drawer_closeout else self.credit_card_sales + self.total_card_tips
 
     @property

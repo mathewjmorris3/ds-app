@@ -314,6 +314,41 @@ textarea {
 }
 
 
+/* Native date controls need explicit sizing to avoid WebKit intrinsic-width overflow. */
+.date-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+
+input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 46px;
+    line-height: 1.5;
+    text-align: left;
+}
+
+
+/* Keep WebKit's selected date visible without replacing the native picker. */
+input[type="date"]::-webkit-datetime-edit {
+    min-width: 0;
+    padding: 0;
+}
+
+
+input[type="date"]::-webkit-date-and-time-value {
+    min-width: 0;
+    min-height: 1.5em;
+    text-align: left;
+}
+
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -748,15 +783,62 @@ pre {
     }
 
     .inline-form {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
     }
 
     .inline-form .form-group {
-        margin-bottom: 12px;
+        margin-bottom: 0;
     }
 
-    .button {
-        min-height: 46px;
+    button,
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"],
+    .button,
+    .tab {
+        min-height: 48px;
+        max-width: 100%;
+        text-align: center;
+    }
+
+    input[type="date"],
+    select {
+        min-height: 48px;
+    }
+
+    .mobile-primary-action,
+    button.button-primary[type="submit"],
+    button.button-primary:not([type]),
+    input[type="submit"] {
+        width: 100%;
+    }
+
+    .actions,
+    .tabs {
+        gap: 12px;
+    }
+
+    .tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    button:focus-visible,
+    input[type="button"]:focus-visible,
+    input[type="submit"]:focus-visible,
+    input[type="reset"]:focus-visible,
+    .button:focus-visible,
+    .tab:focus-visible {
+        outline: 3px solid var(--primary);
+        outline-offset: 3px;
+    }
+
+    .header-actions :is(button, .button):focus-visible {
+        outline-color: white;
     }
 }
 
@@ -828,9 +910,9 @@ pre {
         width: 100%;
 
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 
-        gap: 8px;
+        gap: 12px;
     }
 
     .header-user {
@@ -852,7 +934,7 @@ pre {
 
     .logout-button {
         width: 100%;
-        min-height: 42px;
+        min-height: 48px;
 
         padding: 10px 8px;
     }
